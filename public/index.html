@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sitefinity MCP — Live Explorer</title>
+  <meta name="description" content="Interactive explorer for the Sitefinity CMS MCP server. Browse content types, query content, and exercise every MCP tool live." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' font-size='16' font-family='monospace' fill='white' text-anchor='middle'%3ESF%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="aurora"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">SF</div>
+      <div class="brand-text">
+        <h1>Sitefinity <span>MCP</span></h1>
+        <p>Live Model Context Protocol server</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div id="status" class="status status--connecting">
+        <span class="dot"></span><span class="status-label">Connecting…</span>
+      </div>
+      <button id="wireToggle" class="btn btn--ghost" title="Show the raw JSON-RPC traffic">
+        ◇ Wire log <span id="wireCount" class="badge">0</span>
+      </button>
+      <a class="btn btn--ghost" id="repoLink" href="https://github.com/jaysanderson/SitefinityMCP" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-view="dashboard">Dashboard</button>
+    <button class="tab" data-view="library">Content Library</button>
+    <button class="tab" data-view="query">Query Builder</button>
+    <button class="tab" data-view="search">Search</button>
+    <button class="tab" data-view="playground">Tool Playground</button>
+    <button class="tab" data-view="about">About</button>
+  </nav>
+
+  <main id="main">
+    <!-- DASHBOARD -->
+    <section class="view is-active" id="view-dashboard">
+      <div class="hero">
+        <h2>Everything the MCP server can do — <em>live</em>.</h2>
+        <p class="muted">This page talks to the same server over the Model Context Protocol. Every panel below issues real <code>tools/call</code> requests against a live Sitefinity instance.</p>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stat"><div class="stat-num" id="stat-tools">—</div><div class="stat-label">MCP Tools</div></div>
+        <div class="stat"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Content Types</div></div>
+        <div class="stat"><div class="stat-num" id="stat-protocol">—</div><div class="stat-label">Protocol</div></div>
+        <div class="stat stat--wide"><div class="stat-num stat-num--sm" id="stat-service">—</div><div class="stat-label">Service Root</div></div>
+      </div>
+
+      <h3 class="section-title">Capabilities</h3>
+      <p class="muted section-sub">Generated live from <code>tools/list</code>. Click a tool to try it in the Playground.</p>
+      <div class="tool-grid" id="toolGrid"></div>
+    </section>
+
+    <!-- CONTENT LIBRARY -->
+    <section class="view" id="view-library">
+      <div class="view-head">
+        <div>
+          <h2>Content Library</h2>
+          <p class="muted">Every content type the live service exposes — discovered from the OData <code>$metadata</code>.</p>
+        </div>
+        <input id="typeFilter" class="input" type="search" placeholder="Filter types…" />
+      </div>
+      <div class="type-grid" id="typeGrid"></div>
+    </section>
+
+    <!-- QUERY BUILDER -->
+    <section class="view" id="view-query">
+      <h2>Query Builder</h2>
+      <p class="muted">Compose an OData query — <code>sitefinity_query_items</code>.</p>
+      <div class="panel form-grid">
+        <label>Content type
+          <select id="q-type" class="input"></select>
+        </label>
+        <label>$filter
+          <input id="q-filter" class="input" placeholder="contains(Title,'meal')" />
+        </label>
+        <label>$select <span class="hint">comma-separated</span>
+          <input id="q-select" class="input" placeholder="Title,PublicationDate" />
+        </label>
+        <label>$orderby <span class="hint">comma-separated</span>
+          <input id="q-orderby" class="input" placeholder="PublicationDate desc" />
+        </label>
+        <label>$top
+          <input id="q-top" class="input" type="number" min="1" max="1000" value="10" />
+        </label>
+        <label>$skip
+          <input id="q-skip" class="input" type="number" min="0" value="0" />
+        </label>
+        <label>$expand <span class="hint">comma-separated</span>
+          <input id="q-expand" class="input" placeholder="RelatedEvents" />
+        </label>
+        <label class="check">
+          <input id="q-count" type="checkbox" /> include @odata.count
+        </label>
+      </div>
+      <div class="actions">
+        <button id="q-run" class="btn btn--primary">Run query</button>
+        <span id="q-meta" class="result-meta"></span>
+      </div>
+      <div id="q-results" class="results"></div>
+    </section>
+
+    <!-- SEARCH -->
+    <section class="view" id="view-search">
+      <h2>Search</h2>
+      <p class="muted">Free-text <code>contains()</code> search — <code>sitefinity_search_items</code>.</p>
+      <div class="panel form-grid">
+        <label>Content type
+          <select id="s-type" class="input"></select>
+        </label>
+        <label>Term
+          <input id="s-term" class="input" placeholder="meal" />
+        </label>
+        <label>Fields <span class="hint">comma-separated</span>
+          <input id="s-fields" class="input" placeholder="Title,Summary" />
+        </label>
+        <label>$top
+          <input id="s-top" class="input" type="number" min="1" max="100" value="12" />
+        </label>
+      </div>
+      <div class="actions">
+        <button id="s-run" class="btn btn--primary">Search</button>
+        <span id="s-meta" class="result-meta"></span>
+      </div>
+      <div id="s-results" class="results"></div>
+    </section>
+
+    <!-- PLAYGROUND -->
+    <section class="view" id="view-playground">
+      <h2>Tool Playground</h2>
+      <p class="muted">Auto-generated forms for <strong>all</strong> MCP tools, straight from each tool's input schema. This is the full surface area.</p>
+      <div id="playground" class="playground"></div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="view" id="view-about">
+      <h2>About</h2>
+      <div class="panel prose" id="about"></div>
+    </section>
+  </main>
+
+  <!-- WIRE LOG DRAWER -->
+  <aside id="wire" class="wire">
+    <div class="wire-head">
+      <strong>JSON-RPC wire log</strong>
+      <div>
+        <button id="wireClear" class="btn btn--ghost btn--sm">Clear</button>
+        <button id="wireClose" class="btn btn--ghost btn--sm">✕</button>
+      </div>
+    </div>
+    <div id="wireBody" class="wire-body"></div>
+  </aside>
+  <div id="wireBackdrop" class="backdrop"></div>
+
+  <!-- TYPE DETAIL MODAL -->
+  <div id="modal" class="modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modal-title">Type</h3>
+        <button id="modal-close" class="btn btn--ghost btn--sm">✕</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span>Sitefinity MCP · zero-dependency · served by the same Node process as <code>/mcp</code></span>
+  </footer>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ WORKDIR /app
 # Source only — there are no npm dependencies to install.
 COPY package.json ./
 COPY src ./src
+COPY public ./public
 
 ENV NODE_ENV=production \
     MCP_TRANSPORT=http \

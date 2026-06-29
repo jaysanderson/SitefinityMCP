@@ -12,6 +12,8 @@
 
 import http from "node:http";
 
+import { tryServeStatic } from "./static.js";
+
 const MAX_BODY = 5 * 1024 * 1024; // 5 MB
 
 function send(res, status, headers, body) {
@@ -71,7 +73,7 @@ export function startHttpServer(handler, opts) {
       return json(res, 200, { status: "ok", server: "sitefinity-mcp" });
     }
 
-    if (req.method === "GET" && path === "/") {
+    if (req.method === "GET" && (path === "/api/info" || path === "/info")) {
       const info = {
         server: "sitefinity-mcp",
         description: "MCP server for the Sitefinity CMS REST (OData) API.",
@@ -99,6 +101,15 @@ export function startHttpServer(handler, opts) {
       }
       const { status, body } = await handler.handleRaw(text);
       return json(res, status, body);
+    }
+
+    // Everything else: serve the bundled web UI from public/.
+    if (req.method === "GET" || req.method === "HEAD") {
+      const asset = await tryServeStatic(path);
+      if (asset) {
+        res.writeHead(asset.status, asset.headers);
+        return res.end(req.method === "HEAD" ? undefined : asset.body);
+      }
     }
 
     return json(res, 404, { error: "Not found" });
