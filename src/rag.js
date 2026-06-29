@@ -125,16 +125,18 @@ export function createRagHandlers({ arag, client }) {
   async function graph() {
     if (graphCache && Date.now() - graphAt < 300000) return graphCache;
 
-    const nodesRaw = await arag.graphNodes({ prop: "node" }, { top: 80 });
+    const NOISE_GROUPS = new Set(["DATE", "TIME", "MAIL", "MONEY", "CARDINAL", "ORDINAL", "PERCENT", "QUANTITY"]);
+    const isJunk = (v) => v.length < 3 || /^[\d\s:.\-tzapm/]+$/i.test(v);
+    const nodesRaw = await arag.graphNodes({ prop: "node" }, { top: 120 });
     const ents = [];
     const seen = new Set();
     for (const n of nodesRaw?.nodes || []) {
       if (n.type !== "entity") continue;
       const v = (n.value || "").trim();
-      if (!v || seen.has(v)) continue;
+      if (!v || seen.has(v) || NOISE_GROUPS.has(n.group) || isJunk(v)) continue;
       seen.add(v);
       ents.push({ value: v, group: n.group || "MISC", score: n.score || 1, degree: 0 });
-      if (ents.length >= 50) break;
+      if (ents.length >= 70) break;
     }
     const entSet = new Set(ents.map((e) => e.value));
 
@@ -165,7 +167,13 @@ export function createRagHandlers({ arag, client }) {
     for (const e of edges) { deg[e.from] = (deg[e.from] || 0) + e.weight; deg[e.to] = (deg[e.to] || 0) + e.weight; }
     for (const e of ents) e.degree = deg[e.value] || 0;
 
-    graphCache = { entities: ents, edges, groups: [...new Set(ents.map((e) => e.group))], resourceCount: Object.keys(byResource).length };
+    // Keep the connected graph (drop isolated entities); fall back if too sparse.
+    let kept = ents.filter((e) => e.degree > 0).sort((a, b) => b.degree - a.degree).slice(0, 46);
+    if (kept.length < 8) kept = ents.slice(0, 30);
+    const keptSet = new Set(kept.map((e) => e.value));
+    const keptEdges = edges.filter((e) => keptSet.has(e.from) && keptSet.has(e.to));
+
+    graphCache = { entities: kept, edges: keptEdges, groups: [...new Set(kept.map((e) => e.group))], resourceCount: Object.keys(byResource).length };
     graphAt = Date.now();
     return graphCache;
   }
