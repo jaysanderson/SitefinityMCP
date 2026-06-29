@@ -313,6 +313,11 @@ pre.json {
 .msg-trace { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
 .msg-trace .chip { cursor: default; }
 .msg-trace .chip.err { color: var(--danger); border-color: rgba(248,113,113,0.4); }
+.msg-trace .rag-chip { color: var(--accent); border-color: rgba(16,185,129,0.45); background: rgba(16,185,129,0.1); font-weight: 700; }
+.msg-sources { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
+.msg-sources-h { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-soft); margin-bottom: 6px; }
+.src-chip { color: var(--muted); text-decoration: none; }
+a.src-chip:hover { color: var(--accent-2); border-color: rgba(34,211,238,0.4); }
 .chat-empty { text-align: center; color: var(--muted); padding: 40px 20px; }
 .chat-empty .big { font-size: 26px; margin-bottom: 6px; }
 .chat-suggest { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -22,6 +22,7 @@ export function createChatHandler(toolset, config) {
     description: t.description,
     input_schema: t.inputSchema,
   }));
+  const serviceRoot = `${config.baseUrl}/api/${config.serviceName}`;
 
   return async function handleChat(rawMessages) {
     const messages = (Array.isArray(rawMessages) ? rawMessages : [])
@@ -33,13 +34,51 @@ export function createChatHandler(toolset, config) {
       throw new Error("Expected a non-empty conversation ending with a user message.");
     }
 
-    return runAgentLoop({
+    // Collect the sources behind this turn's answer (ARAG + structured).
+    const sources = [];
+    const seen = new Set();
+    const executeTool = async (name, input) => {
+      const r = await toolset.call(name, input);
+      try { collectChatSources(sources, seen, name, input, r, serviceRoot, config.baseUrl); } catch { /* best effort */ }
+      return r;
+    };
+
+    const result = await runAgentLoop({
       apiKey: config.apiKey,
       model: config.model,
       system: SYSTEM_PROMPT,
       messages,
       tools,
-      executeTool: (name, input) => toolset.call(name, input),
+      executeTool,
     });
+    return { ...result, sources: sources.slice(0, 10) };
   };
+}
+
+function collectChatSources(sources, seen, name, input, r, serviceRoot, baseUrl) {
+  let data;
+  try { data = JSON.parse(r?.content?.[0]?.text ?? ""); } catch { return; }
+  const add = (key, v) => { if (!key || seen.has(key)) return; seen.add(key); sources.push(v); };
+
+  if (name === "sitefinity_grounded_answer" && Array.isArray(data?.sources)) {
+    for (const s of data.sources) {
+      const type = s.slug ? s.slug.split("-")[0] : null;
+      add("g:" + (s.id || s.title), { title: s.title, type, via: "rag" });
+    }
+  } else if (name === "sitefinity_semantic_search" && Array.isArray(data?.results)) {
+    for (const s of data.results) add("s:" + s.title, { title: s.title, via: "rag" });
+  } else if (Array.isArray(data?.value)) {
+    const type = input?.type;
+    for (const it of data.value) {
+      if (!it || typeof it !== "object") continue;
+      const id = it.Id;
+      const title = it.Title || it.Name || it.UrlName || id;
+      if (!title) continue;
+      const url = it.ItemDefaultUrl ? baseUrl + it.ItemDefaultUrl : type && id ? `${serviceRoot}/${type}(${id})` : null;
+      add((type || "") + ":" + (id || title), {
+        title: String(title).replace(/<[^>]*>/g, "").trim().slice(0, 140),
+        type, url, via: "odata",
+      });
+    }
+  }
 }

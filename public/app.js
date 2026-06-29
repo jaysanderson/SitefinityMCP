@@ -545,8 +545,24 @@ function chatBubble(m) {
   bubble.innerHTML = formatMessage(m.content);
   if (m.trace?.length) {
     const trace = el("div", { className: "msg-trace" });
+    const grounded = m.trace.some((t) => /grounded_answer|semantic_search/.test(t.name));
+    if (grounded) trace.append(el("span", { className: "chip rag-chip" }, "✦ grounded · Agentic RAG"));
     for (const t of m.trace) trace.append(el("span", { className: "chip" + (t.ok ? "" : " err") }, t.name.replace("sitefinity_", "")));
     bubble.append(trace);
+  }
+  if (m.sources?.length) {
+    const sb = el("div", { className: "msg-sources" });
+    sb.append(el("div", { className: "msg-sources-h" }, "Sources"));
+    const wrap = el("div", { className: "msg-trace" });
+    for (const s of m.sources.slice(0, 8)) {
+      const label = (s.title || "").slice(0, 44);
+      const chip = s.url
+        ? el("a", { className: "chip src-chip", href: s.url, target: "_blank", rel: "noopener" }, label)
+        : el("span", { className: "chip src-chip" }, label);
+      wrap.append(chip);
+    }
+    sb.append(wrap);
+    bubble.append(sb);
   }
   row.append(bubble);
   return row;
@@ -579,7 +595,7 @@ async function sendChat() {
     if (!res.ok) {
       state.chat.push({ role: "assistant", content: "⚠️ " + (data.error || "Assistant error.") });
     } else {
-      state.chat.push({ role: "assistant", content: data.reply || "(no reply)", trace: data.trace });
+      state.chat.push({ role: "assistant", content: data.reply || "(no reply)", trace: data.trace, sources: data.sources });
     }
   } catch (e) {
     state.chatBusy = false;

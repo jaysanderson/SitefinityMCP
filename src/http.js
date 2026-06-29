@@ -153,7 +153,7 @@ export function startHttpServer(handler, opts) {
       }
       try {
         const result = await opts.chat(payload.messages);
-        return json(res, 200, { reply: result.text, trace: result.trace, stop: result.stop });
+        return json(res, 200, { reply: result.text, trace: result.trace, stop: result.stop, sources: result.sources || [] });
       } catch (err) {
         const status = err?.status && err.status >= 400 && err.status < 600 ? 502 : 500;
         return json(res, status, { error: err?.message || "Assistant error" });
