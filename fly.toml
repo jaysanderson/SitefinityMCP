@@ -15,6 +15,7 @@ primary_region = "syd"
   SITEFINITY_SERVICE_NAME = "default"
   SITEFINITY_AUTH_MODE = "anonymous"
   ARAG_REGION = "aws-us-east-2-1"
+  ARAG_KB_ID = "f5562431-2cc6-45bc-932f-29ae755bb3b4"
 
 [http_service]
   internal_port = 8080
