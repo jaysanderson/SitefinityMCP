@@ -888,7 +888,10 @@ function GraphAtlas() {
         <p class="muted">${data.entities.length} entities Agentic RAG automatically extracted from the Sitefinity content (people, places, organizations, dates…), linked where they co-occur across ${data.resourceCount} resources. Click any entity to trace its connections.</p>
       </div>
       <div class="x-atlas-legend">
-        ${groupsPresent.map((g) => html`<span key=${g} class="x-leg"><i style=${{ background: gColor(g) }}></i>${GROUP_LABEL[g] || g}</span>`)}
+        ${[...new Set(groupsPresent.map((g) => GROUP_LABEL[g] || g))].map((label) => {
+          const g = groupsPresent.find((x) => (GROUP_LABEL[x] || x) === label);
+          return html`<span key=${label} class="x-leg"><i style=${{ background: gColor(g) }}></i>${label}</span>`;
+        })}
       </div>
       <div class="x-stage" style=${{ aspectRatio: GW + " / " + GH }}>
         <svg viewBox=${`0 0 ${GW} ${GH}`} preserveAspectRatio="xMidYMid meet" style=${{ width: "100%", height: "100%" }}>
