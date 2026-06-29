@@ -64,6 +64,114 @@ async function callMessages({ apiKey, model, system, messages, tools, maxTokens,
 }
 
 /**
+ * Streaming variant of callMessages: parses the Anthropic SSE stream, invokes
+ * onDelta(text) for each text chunk, and returns the assembled message
+ * ({ content, stop_reason }) so the agent loop can continue / replay it.
+ */
+async function callMessagesStream({ apiKey, model, system, messages, tools, maxTokens, timeoutMs }, onDelta) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": ANTHROPIC_VERSION,
+        "content-type": "application/json",
+        accept: "text/event-stream",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        system,
+        messages,
+        tools,
+        thinking: { type: "adaptive" },
+        output_config: { effort: "medium" },
+        stream: true,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err && err.name === "AbortError") throw new AnthropicError(`Anthropic request timed out after ${timeoutMs}ms`);
+    throw new AnthropicError(`Network error contacting Anthropic: ${err?.message || err}`);
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    clearTimeout(timer);
+    let body = text;
+    try { body = JSON.parse(text); } catch { /* keep text */ }
+    throw new AnthropicError(`Anthropic API error: ${body?.error?.message || res.status}`, res.status, body);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  const blocks = {};
+  let stopReason = null;
+  let streamErr = null;
+
+  const handle = (ev, data) => {
+    if (ev === "error") { streamErr = data?.error?.message || "stream error"; return; }
+    if (ev === "content_block_start") {
+      const b = { ...(data.content_block || {}) };
+      if (b.type === "tool_use") b._json = "";
+      if (b.type === "text") b.text = b.text || "";
+      if (b.type === "thinking") b.thinking = b.thinking || "";
+      blocks[data.index] = b;
+    } else if (ev === "content_block_delta") {
+      const b = blocks[data.index]; if (!b) return;
+      const d = data.delta || {};
+      if (d.type === "text_delta") { b.text = (b.text || "") + d.text; if (onDelta) onDelta(d.text); }
+      else if (d.type === "input_json_delta") { b._json = (b._json || "") + d.partial_json; }
+      else if (d.type === "thinking_delta") { b.thinking = (b.thinking || "") + d.thinking; }
+      else if (d.type === "signature_delta") { b.signature = d.signature; }
+    } else if (ev === "content_block_stop") {
+      const b = blocks[data.index];
+      if (b && b.type === "tool_use") { try { b.input = JSON.parse(b._json || "{}"); } catch { b.input = {}; } delete b._json; }
+    } else if (ev === "message_delta") {
+      if (data.delta && data.delta.stop_reason) stopReason = data.delta.stop_reason;
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const chunk = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        let ev = null;
+        let dataStr = "";
+        for (const line of chunk.split("\n")) {
+          if (line.startsWith("event:")) ev = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+        }
+        if (!ev || !dataStr) continue;
+        let data;
+        try { data = JSON.parse(dataStr); } catch { continue; }
+        handle(ev, data);
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (streamErr) throw new AnthropicError(`Anthropic stream error: ${streamErr}`);
+
+  const content = Object.keys(blocks)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((i) => { const { _json, ...rest } = blocks[i]; return rest; });
+  return { content, stop_reason: stopReason };
+}
+
+/**
  * Run the agentic tool-use loop until the model stops calling tools.
  *
  * @param {object} opts
@@ -82,15 +190,19 @@ export async function runAgentLoop({
   messages,
   tools,
   executeTool,
+  onDelta,
   maxIterations = 8,
   maxTokens = 4096,
   timeoutMs = 90000,
 }) {
   const convo = messages.slice();
   const trace = [];
+  const useStream = typeof onDelta === "function";
 
   for (let i = 0; i < maxIterations; i++) {
-    const resp = await callMessages({ apiKey, model, system, messages: convo, tools, maxTokens, timeoutMs });
+    const resp = useStream
+      ? await callMessagesStream({ apiKey, model, system, messages: convo, tools, maxTokens, timeoutMs }, onDelta)
+      : await callMessages({ apiKey, model, system, messages: convo, tools, maxTokens, timeoutMs });
 
     if (resp.stop_reason === "refusal") {
       return { text: "I'm not able to help with that request.", trace, stop: "refusal" };

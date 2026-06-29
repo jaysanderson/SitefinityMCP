@@ -24,7 +24,7 @@ export function createChatHandler(toolset, config) {
   }));
   const serviceRoot = `${config.baseUrl}/api/${config.serviceName}`;
 
-  return async function handleChat(rawMessages) {
+  return async function handleChat(rawMessages, onEvent) {
     const messages = (Array.isArray(rawMessages) ? rawMessages : [])
       .filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string" && m.content.trim())
       .slice(-20)
@@ -38,8 +38,10 @@ export function createChatHandler(toolset, config) {
     const sources = [];
     const seen = new Set();
     const executeTool = async (name, input) => {
+      if (onEvent) onEvent({ type: "tool", name });
       const r = await toolset.call(name, input);
       try { collectChatSources(sources, seen, name, input, r, serviceRoot, config.baseUrl); } catch { /* best effort */ }
+      if (onEvent) onEvent({ type: "tool_result", name, ok: !r?.isError });
       return r;
     };
 
@@ -50,6 +52,7 @@ export function createChatHandler(toolset, config) {
       messages,
       tools,
       executeTool,
+      onDelta: onEvent ? (text) => onEvent({ type: "delta", text }) : undefined,
     });
     return { ...result, sources: sources.slice(0, 10) };
   };

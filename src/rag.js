@@ -47,14 +47,16 @@ export function createRagHandlers({ arag, client }) {
     }
 
     // Semantic side — Agentic RAG meaning-based retrieval across the whole KB.
+    // Only surface genuinely relevant matches; near-zero scores undercut the point.
     let semantic = [];
     try {
-      const f = await arag.find(q, { top: 8 });
-      semantic = f.paragraphs.map((p) => ({
-        title: p.title,
-        text: p.text,
-        score: Math.round((p.score || 0) * 1000) / 1000,
-      }));
+      const f = await arag.find(q, { top: 12 });
+      const seenTitles = new Set();
+      semantic = f.paragraphs
+        .filter((p) => (p.score || 0) >= 0.08)
+        .filter((p) => { const k = (p.title || "").toLowerCase(); if (seenTitles.has(k)) return false; seenTitles.add(k); return true; })
+        .slice(0, 6)
+        .map((p) => ({ title: p.title, text: p.text, score: Math.round((p.score || 0) * 100) / 100 }));
     } catch {
       semantic = [];
     }

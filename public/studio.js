@@ -377,7 +377,7 @@ function AtlasPanel({ node, items, loading, onClose }) {
         <div class="x-panel-items">
           ${items.map((it, i) => html`<div key=${i} class="x-panel-item">
             <div class="x-panel-title">${stripHtml(it.Title || it.Name || it.UrlName || it.Id || "(untitled)")}</div>
-            ${(it.PublicationDate || it.LastModified) && html`<div class="x-panel-date">${fmtDate(it.PublicationDate || it.LastModified)}</div>`}
+            ${fmtDate(it.PublicationDate || it.LastModified) && html`<div class="x-panel-date">${fmtDate(it.PublicationDate || it.LastModified)}</div>`}
           </div>`)}
         </div>`}
       ${node.relations && node.relations.length > 0 && html`<div class="x-panel-rel"><span class="muted">relations:</span> ${node.relations.join(", ")}</div>`}
@@ -565,7 +565,7 @@ function Demo() {
       <//>
 
       <${DemoAct} n=${2} title="Here's why it works" sub="Same content. Same query. One understands what you meant.">
-        <${CompareView} initial="lunch" auto=${true} />
+        <${CompareView} initial="sustainability" auto=${true} />
       <//>
 
       <${DemoAct} n=${3} title="Now build a whole page from that same content" sub="A plain-English brief → live CMS data over MCP → a rendered, grounded experience.">
@@ -606,13 +606,22 @@ function DemoAct({ n, title, sub, children }) {
     </section>`;
 }
 
+function deriveKeyword(s) {
+  const words = String(s || "").toLowerCase().match(/[a-z]{4,}/g) || [];
+  const stop = new Set(["what", "which", "this", "that", "with", "from", "have", "does", "your", "about", "there", "they", "will", "when", "where", "coriander", "lane", "restaurant", "here", "some", "give", "tell"]);
+  const cand = words.filter((w) => !stop.has(w)).sort((a, b) => b.length - a.length);
+  return cand[0] || words[0] || "food";
+}
+
 function NarratedAsk({ question, keyword }) {
-  const blank = () => [
-    { key: "kw", label: `Keyword search for "${keyword}"`, tool: "sitefinity_search_items", status: "idle", result: null },
+  const blank = (k) => [
+    { key: "kw", label: `Keyword search for "${k}"`, tool: "sitefinity_search_items", status: "idle", result: null },
     { key: "sem", label: "Meaning-based search", tool: "sitefinity_semantic_search", status: "idle", result: null },
     { key: "ans", label: "Grounded answer", tool: "sitefinity_grounded_answer", status: "idle", result: null },
   ];
-  const [steps, setSteps] = useState(blank);
+  const [q, setQ] = useState(question);
+  const [kw, setKw] = useState(keyword);
+  const [steps, setSteps] = useState(() => blank(keyword));
   const [wire, setWire] = useState([]);
   const [answer, setAnswer] = useState(null);
   const [running, setRunning] = useState(false);
@@ -620,45 +629,54 @@ function NarratedAsk({ question, keyword }) {
   const setStep = (key, patch) => setSteps((s) => s.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   const logWire = (e) => setWire((w) => [...w, e]);
 
-  const play = useCallback(async () => {
+  const play = useCallback(async (questionArg) => {
     if (running) return;
-    setRunning(true); setAnswer(null); setWire([]); setSteps(blank());
+    const Q = (questionArg ?? q).trim();
+    if (!Q) return;
+    const K = deriveKeyword(Q);
+    setQ(Q); setKw(K);
+    setRunning(true); setAnswer(null); setWire([]); setSteps(blank(K));
 
     setStep("kw", { status: "running" });
-    const kwRes = await callToolLogged("sitefinity_search_items", { type: "newsitems", term: keyword, top: 5 }, logWire);
+    const kwRes = await callToolLogged("sitefinity_search_items", { type: "newsitems", term: K, top: 5 }, logWire);
     const kwCount = Array.isArray(kwRes?.value) ? kwRes.value.length : 0;
     setStep("kw", { status: "done", result: { count: kwCount } });
     await wait(550);
 
     setStep("sem", { status: "running" });
-    const semRes = await callToolLogged("sitefinity_semantic_search", { query: question, top: 6 }, logWire);
+    const semRes = await callToolLogged("sitefinity_semantic_search", { query: Q, top: 6 }, logWire);
     const sem = semRes?.results || [];
     const seenT = new Set();
     const topTitles = [];
     for (const r of sem) {
-      const k = String(r.title || "").trim().toLowerCase();
-      if (!k || seenT.has(k)) continue;
-      seenT.add(k); topTitles.push(r.title);
+      const t = String(r.title || "").trim().toLowerCase();
+      if (!t || seenT.has(t)) continue;
+      seenT.add(t); topTitles.push(r.title);
       if (topTitles.length >= 3) break;
     }
     setStep("sem", { status: "done", result: { count: sem.length, top: topTitles } });
     await wait(550);
 
     setStep("ans", { status: "running" });
-    const ansRes = await callToolLogged("sitefinity_grounded_answer", { question }, logWire);
+    const ansRes = await callToolLogged("sitefinity_grounded_answer", { question: Q }, logWire);
     setStep("ans", { status: "done", result: { sources: (ansRes?.sources || []).length } });
     setAnswer(ansRes);
     setRunning(false);
-  }, [question, keyword, running]);
+  }, [q, running]);
 
-  useEffect(() => { play(); }, []);
+  useEffect(() => { play(question); }, []);
 
   return html`
     <div class="na">
       <div class="na-main">
-        <div class="na-q"><span class="na-q-avatar">?</span><div>${question}</div></div>
+        <div class="na-input">
+          <input class="input" value=${q} disabled=${running}
+            onInput=${(e) => setQ(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && play()}
+            placeholder="Ask your own question — it runs live…" />
+          <button class="btn btn--primary btn--sm" disabled=${running} onClick=${() => play()}>${running ? "Running…" : "Run live"}</button>
+        </div>
         <div class="na-steps">
-          ${steps.map((s) => html`<${NaStep} key=${s.key} s=${s} keyword=${keyword} />`)}
+          ${steps.map((s) => html`<${NaStep} key=${s.key} s=${s} keyword=${kw} />`)}
         </div>
         ${answer && html`
           <div class="na-answer">
@@ -670,7 +688,7 @@ function NarratedAsk({ question, keyword }) {
             ${(answer.sources || []).length > 0 && html`<div class="msg-trace">${answer.sources.slice(0, 8).map((s, i) => html`<span key=${i} class="chip src-chip">${s.title}</span>`)}</div>`}
           </div>`}
         <div class="na-actions">
-          <button class="btn btn--ghost btn--sm" disabled=${running} onClick=${play}>↻ Replay</button>
+          <button class="btn btn--ghost btn--sm" disabled=${running} onClick=${() => { setQ(question); play(question); }}>↻ Replay hero question</button>
         </div>
       </div>
       <aside class="na-wire">

@@ -499,11 +499,10 @@ function renderAbout() {
 
 // ---- Assistant -------------------------------------------------------------
 const SUGGESTIONS = [
-  "What can you help me explore?",
-  "How many news items are there?",
-  "Find events about food",
-  "What content types exist?",
-  "Show me the 3 latest blog posts",
+  "Which dishes are safe for a gluten allergy, and why?",
+  "What can I eat for lunch?",
+  "Is the food locally sourced and sustainable?",
+  "What's coming up for families and kids?",
 ];
 
 function setupAssistant() {
@@ -535,14 +534,6 @@ function renderChat() {
     return;
   }
   for (const m of state.chat) log.append(chatBubble(m));
-  if (state.chatBusy) {
-    const t = el("div", { className: "msg msg-ai" });
-    t.append(el("div", { className: "msg-avatar" }, "✦"));
-    const bubble = el("div", { className: "msg-bubble typing" });
-    bubble.innerHTML = "<span></span><span></span><span></span>";
-    t.append(bubble);
-    log.append(t);
-  }
   log.scrollTop = log.scrollHeight;
 }
 
@@ -550,8 +541,32 @@ function chatBubble(m) {
   const row = el("div", { className: "msg " + (m.role === "user" ? "msg-user" : "msg-ai") });
   row.append(el("div", { className: "msg-avatar" }, m.role === "user" ? "You" : "✦"));
   const bubble = el("div", { className: "msg-bubble" });
-  bubble.innerHTML = formatMessage(m.content);
-  if (m.trace?.length) {
+
+  // Live tool stepper (during streaming and after).
+  if (m.role === "assistant" && m.steps?.length) {
+    const steps = el("div", { className: "chat-steps" });
+    for (const s of m.steps) {
+      const st = el("div", { className: "chat-step " + (s.ok === null ? "run" : s.ok ? "ok" : "err") });
+      const ic = el("span", { className: "chat-step-i" });
+      if (s.ok === null) ic.innerHTML = '<span class="spinner"></span>';
+      else ic.textContent = s.ok ? "✓" : "✗";
+      st.append(ic, el("span", {}, "tools/call " + s.name.replace("sitefinity_", "")));
+      steps.append(st);
+    }
+    bubble.append(steps);
+  }
+
+  if (m.content) {
+    const body = el("div", { className: "msg-text" });
+    body.innerHTML = formatMessage(m.content) + (m.streaming ? '<span class="cursor"></span>' : "");
+    bubble.append(body);
+  } else if (m.streaming && !m.steps?.length) {
+    const t = el("div", { className: "typing" });
+    t.innerHTML = "<span></span><span></span><span></span>";
+    bubble.append(t);
+  }
+
+  if (!m.streaming && m.trace?.length) {
     const trace = el("div", { className: "msg-trace" });
     const grounded = m.trace.some((t) => /grounded_answer|semantic_search/.test(t.name));
     if (grounded) trace.append(el("span", { className: "chip rag-chip" }, "✦ grounded · Agentic RAG"));
@@ -590,26 +605,62 @@ async function sendChat() {
   if (!text) return;
   input.value = "";
   state.chat.push({ role: "user", content: text });
+  const asst = { role: "assistant", content: "", steps: [], sources: [], streaming: true };
+  state.chat.push(asst);
   state.chatBusy = true;
   renderChat();
+
+  const history = state.chat.filter((m) => !m.streaming).map((m) => ({ role: m.role, content: m.content }));
   try {
-    const res = await fetch("/api/chat", {
+    const res = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: state.chat.map((m) => ({ role: m.role, content: m.content })) }),
+      body: JSON.stringify({ messages: history }),
     });
-    const data = await res.json();
-    state.chatBusy = false;
-    if (!res.ok) {
-      state.chat.push({ role: "assistant", content: "⚠️ " + (data.error || "Assistant error.") });
-    } else {
-      state.chat.push({ role: "assistant", content: data.reply || "(no reply)", trace: data.trace, sources: data.sources });
+    if (!res.ok || !res.body) throw new Error("stream unavailable");
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const chunk = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        const line = chunk.split("\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+        applyChatEvent(asst, evt);
+        renderChat();
+      }
     }
   } catch (e) {
-    state.chatBusy = false;
-    state.chat.push({ role: "assistant", content: "⚠️ " + e.message });
+    if (!asst.content && !asst.steps.length) asst.content = "⚠️ " + e.message;
   }
+  asst.streaming = false;
+  state.chatBusy = false;
   renderChat();
+}
+
+function applyChatEvent(asst, evt) {
+  if (evt.type === "tool") {
+    asst.steps.push({ name: evt.name, ok: null });
+  } else if (evt.type === "tool_result") {
+    for (let i = asst.steps.length - 1; i >= 0; i--) {
+      if (asst.steps[i].name === evt.name && asst.steps[i].ok === null) { asst.steps[i].ok = evt.ok; break; }
+    }
+  } else if (evt.type === "delta") {
+    asst.content += evt.text;
+  } else if (evt.type === "done") {
+    if (evt.reply) asst.content = evt.reply;
+    asst.sources = evt.sources || [];
+    asst.trace = asst.steps.map((s) => ({ name: s.name, ok: s.ok !== false }));
+  } else if (evt.type === "error") {
+    asst.content = "⚠️ " + evt.error;
+  }
 }
 
 // ---- Chrome (tabs, modal, wire) -------------------------------------------

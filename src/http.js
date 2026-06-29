@@ -139,7 +139,34 @@ export function startHttpServer(handler, opts) {
       }
     }
 
-    // AI assistant — agentic chat over the MCP tools (HTTP transport only).
+    // AI assistant — streaming (SSE): live tool calls + token deltas.
+    if (path === "/api/chat/stream") {
+      if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });
+      if (!opts.chat) return json(res, 503, { error: "AI assistant is not configured." });
+      let payload;
+      try {
+        payload = JSON.parse((await readBody(req)) || "{}");
+      } catch {
+        return json(res, 400, { error: "Invalid JSON body" });
+      }
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": "*",
+      });
+      const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+      try {
+        const result = await opts.chat(payload.messages, (evt) => send(evt));
+        send({ type: "done", reply: result.text, sources: result.sources, stop: result.stop });
+      } catch (err) {
+        send({ type: "error", error: err?.message || "Assistant error" });
+      }
+      return res.end();
+    }
+
+    // AI assistant — agentic chat over the MCP tools (non-streaming fallback).
     if (path === "/api/chat") {
       if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });
       if (!opts.chat) {
