@@ -24,7 +24,7 @@ export function createChatHandler(toolset, config) {
   }));
   const serviceRoot = `${config.baseUrl}/api/${config.serviceName}`;
 
-  return async function handleChat(rawMessages, onEvent) {
+  return async function handleChat(rawMessages, onEvent, opts = {}) {
     const messages = (Array.isArray(rawMessages) ? rawMessages : [])
       .filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string" && m.content.trim())
       .slice(-20)
@@ -52,7 +52,8 @@ export function createChatHandler(toolset, config) {
       messages,
       tools,
       executeTool,
-      maxIterations: 16,
+      effort: opts.effort === "low" ? "low" : "medium",
+      maxIterations: opts.effort === "low" ? 12 : 16,
       onDelta: onEvent ? (text) => onEvent({ type: "delta", text }) : undefined,
     });
     return { ...result, sources: sources.slice(0, 10) };

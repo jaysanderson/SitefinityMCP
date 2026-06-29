@@ -103,6 +103,13 @@
       <div id="ai-chat" class="chat" hidden>
         <div id="chat-log" class="chat-log"></div>
         <div class="chat-suggest" id="chat-suggest"></div>
+        <div class="chat-mode">
+          <span class="muted">Speed</span>
+          <div class="toggle-group" id="chat-mode">
+            <button type="button" id="mode-deep" class="is-active" title="Higher reasoning effort">Deep</button>
+            <button type="button" id="mode-fast" title="Faster, lighter reasoning">Fast</button>
+          </div>
+        </div>
         <form id="chat-form" class="chat-form">
           <input id="chat-input" class="input" autocomplete="off" placeholder="Ask about the site's content…" />
           <button id="chat-send" class="btn btn--primary" type="submit">Send</button>

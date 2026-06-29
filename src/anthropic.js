@@ -21,7 +21,7 @@ export class AnthropicError extends Error {
   }
 }
 
-async function callMessages({ apiKey, model, system, messages, tools, maxTokens, timeoutMs }) {
+async function callMessages({ apiKey, model, system, messages, tools, maxTokens, timeoutMs, effort = "medium" }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res;
@@ -40,7 +40,7 @@ async function callMessages({ apiKey, model, system, messages, tools, maxTokens,
         messages,
         tools,
         thinking: { type: "adaptive" },
-        output_config: { effort: "medium" },
+        output_config: { effort },
       }),
       signal: controller.signal,
     });
@@ -68,7 +68,7 @@ async function callMessages({ apiKey, model, system, messages, tools, maxTokens,
  * onDelta(text) for each text chunk, and returns the assembled message
  * ({ content, stop_reason }) so the agent loop can continue / replay it.
  */
-async function callMessagesStream({ apiKey, model, system, messages, tools, maxTokens, timeoutMs }, onDelta) {
+async function callMessagesStream({ apiKey, model, system, messages, tools, maxTokens, timeoutMs, effort = "medium" }, onDelta) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res;
@@ -88,7 +88,7 @@ async function callMessagesStream({ apiKey, model, system, messages, tools, maxT
         messages,
         tools,
         thinking: { type: "adaptive" },
-        output_config: { effort: "medium" },
+        output_config: { effort },
         stream: true,
       }),
       signal: controller.signal,
@@ -191,6 +191,7 @@ export async function runAgentLoop({
   tools,
   executeTool,
   onDelta,
+  effort = "medium",
   maxIterations = 8,
   maxTokens = 4096,
   timeoutMs = 90000,
@@ -201,8 +202,8 @@ export async function runAgentLoop({
 
   for (let i = 0; i < maxIterations; i++) {
     const resp = useStream
-      ? await callMessagesStream({ apiKey, model, system, messages: convo, tools, maxTokens, timeoutMs }, onDelta)
-      : await callMessages({ apiKey, model, system, messages: convo, tools, maxTokens, timeoutMs });
+      ? await callMessagesStream({ apiKey, model, system, messages: convo, tools, maxTokens, timeoutMs, effort }, onDelta)
+      : await callMessages({ apiKey, model, system, messages: convo, tools, maxTokens, timeoutMs, effort });
 
     if (resp.stop_reason === "refusal") {
       return { text: "I'm not able to help with that request.", trace, stop: "refusal" };

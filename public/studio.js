@@ -398,8 +398,9 @@ function RagLab() {
       <div class="x-subtabs">
         <button class=${tab === "ask" ? "is-active" : ""} onClick=${() => setTab("ask")}>Grounded Ask</button>
         <button class=${tab === "compare" ? "is-active" : ""} onClick=${() => setTab("compare")}>Semantic vs Keyword</button>
+        <button class=${tab === "investigate" ? "is-active" : ""} onClick=${() => setTab("investigate")}>Investigate</button>
       </div>
-      ${tab === "ask" ? html`<${GroundedAsk} />` : html`<${CompareView} />`}
+      ${tab === "ask" ? html`<${GroundedAsk} />` : tab === "compare" ? html`<${CompareView} />` : html`<${Investigate} />`}
     </div>`;
 }
 
@@ -528,6 +529,85 @@ function CompareView({ initial = "", auto = false } = {}) {
         </div>
         <p class="muted x-cmp-note">Keyword search only matches the literal string in titles. Agentic RAG understands intent — surfacing relevant passages from across all content (and inside documents), even with no keyword overlap.</p>`}
       ${status === "done" && data && data.error && html`<div class="x-empty panel"><p class="muted">${data.error}</p></div>`}
+    </div>`;
+}
+
+const INV_PRESETS = [
+  "Which dishes are safe for a gluten allergy?",
+  "How does Coriander Lane support its local community?",
+  "What's the story behind the brand's sustainability push?",
+];
+
+function Investigate() {
+  const [q, setQ] = useState("");
+  const [stages, setStages] = useState([]);
+  const [answer, setAnswer] = useState(null);
+  const [running, setRunning] = useState(false);
+
+  const run = useCallback(async (text) => {
+    const question = (text ?? q).trim();
+    if (!question || running) return;
+    setQ(question); setRunning(true); setStages([]); setAnswer(null);
+    try {
+      const res = await fetch("/api/rag/investigate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+          const line = chunk.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          let evt; try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (evt.type === "stage") {
+            setStages((prev) => {
+              const idx = prev.findIndex((s) => s.stage === evt.stage);
+              if (idx >= 0) { const copy = prev.slice(); copy[idx] = evt; return copy; }
+              return [...prev, evt];
+            });
+          } else if (evt.type === "done") {
+            setAnswer({ answer: evt.answer, grounded: evt.grounded, sources: evt.sources || [] });
+          } else if (evt.type === "error") {
+            setAnswer({ answer: "⚠️ " + evt.error, grounded: false, sources: [] });
+          }
+        }
+      }
+    } catch (e) {
+      setAnswer({ answer: "⚠️ " + e.message, grounded: false, sources: [] });
+    } finally { setRunning(false); }
+  }, [q, running]);
+
+  return html`
+    <div class="x-inv">
+      <p class="muted">A multi-step retrieval agent: it fans out across the semantic knowledge base <em>and</em> live Sitefinity records (over MCP), synthesizes a grounded answer, and validates it — streamed stage by stage.</p>
+      <div class="x-bar">
+        <input class="input" placeholder="Ask something that spans sources…" value=${q}
+          onInput=${(e) => setQ(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && run()} />
+        <button class="btn btn--primary" disabled=${running} onClick=${() => run()}>${running ? "Investigating…" : "Investigate"}</button>
+      </div>
+      <div class="x-presets">${INV_PRESETS.map((p) => html`<button key=${p} class="x-chip" disabled=${running} onClick=${() => run(p)}>${p}</button>`)}</div>
+
+      ${stages.length > 0 && html`<div class="inv-pipe">
+        ${stages.map((s, i) => html`<div key=${i} class=${"inv-stage inv-" + s.status}>
+          <div class="inv-rail"><span class="inv-dot">${s.status === "running" ? html`<span class="spinner"></span>` : "✓"}</span></div>
+          <div class="inv-body">
+            <div class="inv-title">${s.title}</div>
+            ${s.detail && html`<div class="inv-detail">${s.detail}</div>`}
+            ${s.items && s.items.length > 0 && html`<div class="inv-items">${s.items.map((it, j) => html`<div key=${j} class="inv-item">${stripHtml(it)}</div>`)}</div>`}
+            ${s.stage === "synth" && s.answer && html`<div class="inv-answer">${formatAnswer(s.answer)}</div>`}
+            ${s.stage === "validate" && html`<span class=${"x-ground-badge " + (s.grounded ? "ok" : "low")}>${s.grounded ? "✓ Grounded" : "⚠ Low confidence"}</span>`}
+          </div>
+        </div>`)}
+      </div>`}
+
+      ${answer && answer.sources && answer.sources.length > 0 && html`<div class="x-answer-sources"><div class="subhead">Cited sources</div><div class="x-src-grid">${answer.sources.map((s, i) => html`<div key=${i} class="x-src"><div class="x-src-title">${s.title}</div></div>`)}</div></div>`}
     </div>`;
 }
 

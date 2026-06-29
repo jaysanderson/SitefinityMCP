@@ -519,6 +519,8 @@ function setupAssistant() {
     suggest.append(b);
   }
   $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat(); });
+  $("#mode-deep").addEventListener("click", () => { state.chatFast = false; $("#mode-deep").classList.add("is-active"); $("#mode-fast").classList.remove("is-active"); });
+  $("#mode-fast").addEventListener("click", () => { state.chatFast = true; $("#mode-fast").classList.add("is-active"); $("#mode-deep").classList.remove("is-active"); });
   renderChat();
 }
 
@@ -615,7 +617,7 @@ async function sendChat() {
     const res = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history }),
+      body: JSON.stringify({ messages: history, fast: !!state.chatFast }),
     });
     if (!res.ok || !res.body) throw new Error("stream unavailable");
     const reader = res.body.getReader();

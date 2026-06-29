@@ -118,6 +118,29 @@ export function startHttpServer(handler, opts) {
       }
     }
 
+    // RAG Lab — Investigate (streamed multi-source fan-out).
+    if (path === "/api/rag/investigate") {
+      if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });
+      if (!opts.rag) return json(res, 503, { error: "Agentic RAG is not configured." });
+      let payload;
+      try { payload = JSON.parse((await readBody(req)) || "{}"); } catch { return json(res, 400, { error: "Invalid JSON body" }); }
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": "*",
+      });
+      const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+      try {
+        const result = await opts.rag.investigate(payload.question, (stage) => send({ type: "stage", ...stage }));
+        send({ type: "done", ...result });
+      } catch (err) {
+        send({ type: "error", error: err?.message || "Investigate error" });
+      }
+      return res.end();
+    }
+
     // RAG Lab — grounded ask + semantic-vs-keyword compare.
     if (path === "/api/rag/ask" || path === "/api/rag/compare") {
       if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });
@@ -158,7 +181,7 @@ export function startHttpServer(handler, opts) {
       });
       const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
       try {
-        const result = await opts.chat(payload.messages, (evt) => send(evt));
+        const result = await opts.chat(payload.messages, (evt) => send(evt), { effort: payload.fast ? "low" : "medium" });
         send({ type: "done", reply: result.text, sources: result.sources, stop: result.stop });
       } catch (err) {
         send({ type: "error", error: err?.message || "Assistant error" });

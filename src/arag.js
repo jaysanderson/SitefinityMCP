@@ -104,6 +104,11 @@ export class AragClient {
     return raw;
   }
 
+  /** Knowledge-graph node exploration. */
+  async graphNodes(query, { top = 60 } = {}) {
+    return this._req("POST", "/graph/nodes", { body: { query: query || { prop: "node" }, top_k: top } });
+  }
+
   /** Create a text resource (ingestion). */
   async ingestText({ slug, title, body, metadata, format = "PLAIN", origin } = {}) {
     const payload = {
