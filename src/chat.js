@@ -52,6 +52,7 @@ export function createChatHandler(toolset, config) {
       messages,
       tools,
       executeTool,
+      maxIterations: 16,
       onDelta: onEvent ? (text) => onEvent({ type: "delta", text }) : undefined,
     });
     return { ...result, sources: sources.slice(0, 10) };
