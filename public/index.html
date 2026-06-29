@@ -31,19 +31,26 @@
   </header>
 
   <nav class="tabs" id="tabs">
-    <button class="tab is-active" data-view="dashboard">Dashboard</button>
+    <button class="tab is-active" data-view="demo">▶ Demo</button>
     <button class="tab" data-view="studio">✨ Studio</button>
     <button class="tab" data-view="assistant">✦ Assistant</button>
-    <button class="tab" data-view="library">Content Library</button>
-    <button class="tab" data-view="query">Query Builder</button>
+    <span class="tab-sep">Developer</span>
+    <button class="tab" data-view="dashboard">Dashboard</button>
+    <button class="tab" data-view="library">Content</button>
+    <button class="tab" data-view="query">Query</button>
     <button class="tab" data-view="search">Search</button>
-    <button class="tab" data-view="playground">Tool Playground</button>
+    <button class="tab" data-view="playground">Playground</button>
     <button class="tab" data-view="about">About</button>
   </nav>
 
   <main id="main">
+    <!-- DEMO (React, guided narrative) -->
+    <section class="view is-active" id="view-demo">
+      <div id="demo-root" class="studio"></div>
+    </section>
+
     <!-- DASHBOARD -->
-    <section class="view is-active" id="view-dashboard">
+    <section class="view" id="view-dashboard">
       <div class="hero">
         <h2>Everything the MCP server can do — <em>live</em>.</h2>
         <p class="muted">This page talks to the same server over the Model Context Protocol. Every panel below issues real <code>tools/call</code> requests against a live Sitefinity instance.</p>

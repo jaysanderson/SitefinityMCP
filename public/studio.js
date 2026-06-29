@@ -35,7 +35,15 @@ async function callTool(name, args = {}) {
   try { return JSON.parse(text); } catch { return text; }
 }
 const stripHtml = (s) => String(s ?? "").replace(/<[^>]*>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
-const fmtDate = (d) => (d ? String(d).replace("T", " ").replace("Z", "").slice(0, 16) : "");
+const fmtDate = (d) => {
+  if (!d) return "";
+  const s = String(d);
+  // Hide null/default dates leaking from the CMS (0001-01-01, pre-1900).
+  if (s.startsWith("0001") || /^00\d\d-/.test(s)) return "";
+  const y = parseInt(s.slice(0, 4), 10);
+  if (Number.isFinite(y) && y < 1990) return "";
+  return s.replace("T", " ").replace("Z", "").slice(0, 16);
+};
 
 /* ============================================================
    COMPOSE — generative UI
@@ -396,10 +404,10 @@ function RagLab() {
 }
 
 const ASK_PRESETS = [
-  "What is Coriander Lane known for?",
-  "What events are coming up?",
-  "Tell me about the menu and ingredients",
-  "What recent news has the restaurant shared?",
+  "What can I eat for lunch at Coriander Lane?",
+  "Is the food healthy and locally sourced?",
+  "Anything fun for kids or families?",
+  "How does the restaurant give back to the community?",
 ];
 
 function GroundedAsk() {
@@ -469,8 +477,8 @@ function formatAnswer(text) {
 
 const CMP_PRESETS = ["lunch", "sustainability", "kids", "fundraiser", "global flavours"];
 
-function CompareView() {
-  const [q, setQ] = useState("");
+function CompareView({ initial = "", auto = false } = {}) {
+  const [q, setQ] = useState(initial);
   const [status, setStatus] = useState("idle");
   const [data, setData] = useState(null);
 
@@ -488,6 +496,8 @@ function CompareView() {
       setData(j); setStatus("done");
     } catch (e) { setData({ error: e.message }); setStatus("done"); }
   }, [q, status]);
+
+  useEffect(() => { if (auto && initial) run(initial); }, []);
 
   return html`
     <div class="x-compare2">
@@ -519,6 +529,172 @@ function CompareView() {
         <p class="muted x-cmp-note">Keyword search only matches the literal string in titles. Agentic RAG understands intent — surfacing relevant passages from across all content (and inside documents), even with no keyword overlap.</p>`}
       ${status === "done" && data && data.error && html`<div class="x-empty panel"><p class="muted">${data.error}</p></div>`}
     </div>`;
+}
+
+/* ============================================================
+   DEMO — guided narrative (the front door)
+   ============================================================ */
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function callToolLogged(name, args, logWire) {
+  const t = performance.now();
+  try {
+    const data = await callTool(name, args);
+    logWire({ tool: name, ms: Math.round(performance.now() - t), ok: true });
+    return data;
+  } catch (e) {
+    logWire({ tool: name, ms: Math.round(performance.now() - t), ok: false });
+    return null;
+  }
+}
+
+function Demo() {
+  const [ai, setAi] = useState({ aiEnabled: false, ragEnabled: false });
+  useEffect(() => { fetch("/api/info").then((r) => r.json()).then(setAi).catch(() => {}); }, []);
+
+  return html`
+    <div class="demo">
+      <section class="demo-hero">
+        <div class="demo-kicker">Live · Sitefinity MCP × Progress Agentic RAG</div>
+        <h1>Your CMS, now <em>understood</em> — not just searched.</h1>
+        <p>Everything below is live. This is the website of <strong>Coriander Lane</strong>, a (fictional) restaurant chain, running in <strong>Sitefinity CMS</strong> and exposed over the Model Context Protocol. Real visitors ask for "lunch", "something healthy", "anything for the kids" — almost never the exact words an editor put in a title. <strong>That gap is why keyword search fails and meaning-based retrieval matters.</strong> Watch it happen in four steps.</p>
+      </section>
+
+      <${DemoAct} n=${1} title="Ask something keyword search can't answer" sub="The server picks tools, falls back to meaning, and cites its sources — with real MCP traffic on the right.">
+        <${NarratedAsk} question="What can I eat for lunch at Coriander Lane?" keyword="lunch" />
+      <//>
+
+      <${DemoAct} n=${2} title="Here's why it works" sub="Same content. Same query. One understands what you meant.">
+        <${CompareView} initial="lunch" auto=${true} />
+      <//>
+
+      <${DemoAct} n=${3} title="Now build a whole page from that same content" sub="A plain-English brief → live CMS data over MCP → a rendered, grounded experience.">
+        ${ai.aiEnabled
+          ? html`<${Compose} aiEnabled=${true} />`
+          : html`<div class="x-empty panel"><p class="muted">Set ANTHROPIC_API_KEY to enable generative Compose.</p></div>`}
+      <//>
+
+      <${DemoAct} n=${4} title="It's all real — go verify" sub="Drop into the raw tool surface, the content map, or the live protocol log.">
+        <div class="demo-verify">
+          ${[
+            { t: "Tool Playground", d: "Call any MCP tool directly and see the JSON-RPC.", v: "playground" },
+            { t: "Atlas", d: "The whole content universe, sized by live counts.", v: "studio" },
+            { t: "Wire log", d: "Every call is real MCP protocol traffic.", v: "wire" },
+            { t: "Content & Query", d: "Browse and filter the raw CMS over OData.", v: "library" },
+          ].map((c, i) => html`<button key=${i} class="demo-vcard" onClick=${() => gotoView(c.v)}>
+            <div class="demo-vt">${c.t} →</div><div class="demo-vd muted">${c.d}</div>
+          </button>`)}
+        </div>
+      <//>
+    </div>`;
+}
+
+// Bridge to the vanilla app's tab switching / wire drawer.
+function gotoView(v) {
+  if (v === "wire") { document.getElementById("wireToggle")?.click(); return; }
+  document.querySelector(`.tab[data-view="${v}"]`)?.click();
+}
+
+function DemoAct({ n, title, sub, children }) {
+  return html`
+    <section class="demo-act">
+      <div class="demo-act-h">
+        <span class="demo-step">${n}</span>
+        <div><h2>${title}</h2><p class="muted">${sub}</p></div>
+      </div>
+      ${children}
+    </section>`;
+}
+
+function NarratedAsk({ question, keyword }) {
+  const blank = () => [
+    { key: "kw", label: `Keyword search for "${keyword}"`, tool: "sitefinity_search_items", status: "idle", result: null },
+    { key: "sem", label: "Meaning-based search", tool: "sitefinity_semantic_search", status: "idle", result: null },
+    { key: "ans", label: "Grounded answer", tool: "sitefinity_grounded_answer", status: "idle", result: null },
+  ];
+  const [steps, setSteps] = useState(blank);
+  const [wire, setWire] = useState([]);
+  const [answer, setAnswer] = useState(null);
+  const [running, setRunning] = useState(false);
+
+  const setStep = (key, patch) => setSteps((s) => s.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+  const logWire = (e) => setWire((w) => [...w, e]);
+
+  const play = useCallback(async () => {
+    if (running) return;
+    setRunning(true); setAnswer(null); setWire([]); setSteps(blank());
+
+    setStep("kw", { status: "running" });
+    const kwRes = await callToolLogged("sitefinity_search_items", { type: "newsitems", term: keyword, top: 5 }, logWire);
+    const kwCount = Array.isArray(kwRes?.value) ? kwRes.value.length : 0;
+    setStep("kw", { status: "done", result: { count: kwCount } });
+    await wait(550);
+
+    setStep("sem", { status: "running" });
+    const semRes = await callToolLogged("sitefinity_semantic_search", { query: question, top: 6 }, logWire);
+    const sem = semRes?.results || [];
+    setStep("sem", { status: "done", result: { count: sem.length, top: sem.slice(0, 3).map((r) => r.title) } });
+    await wait(550);
+
+    setStep("ans", { status: "running" });
+    const ansRes = await callToolLogged("sitefinity_grounded_answer", { question }, logWire);
+    setStep("ans", { status: "done", result: { sources: (ansRes?.sources || []).length } });
+    setAnswer(ansRes);
+    setRunning(false);
+  }, [question, keyword, running]);
+
+  useEffect(() => { play(); }, []);
+
+  return html`
+    <div class="na">
+      <div class="na-main">
+        <div class="na-q"><span class="na-q-avatar">?</span><div>${question}</div></div>
+        <div class="na-steps">
+          ${steps.map((s) => html`<${NaStep} key=${s.key} s=${s} keyword=${keyword} />`)}
+        </div>
+        ${answer && html`
+          <div class="na-answer">
+            <div class="x-answer-head">
+              <span class=${"x-ground-badge " + (answer.grounded ? "ok" : "low")}>${answer.grounded ? "✓ Grounded" : "⚠ Low confidence"}</span>
+              <span class="muted">via Progress Agentic RAG · ${(answer.sources || []).length} sources</span>
+            </div>
+            <div class="x-answer-body">${formatAnswer(answer.answer)}</div>
+            ${(answer.sources || []).length > 0 && html`<div class="msg-trace">${answer.sources.slice(0, 8).map((s, i) => html`<span key=${i} class="chip src-chip">${s.title}</span>`)}</div>`}
+          </div>`}
+        <div class="na-actions">
+          <button class="btn btn--ghost btn--sm" disabled=${running} onClick=${play}>↻ Replay</button>
+        </div>
+      </div>
+      <aside class="na-wire">
+        <div class="na-wire-h">◇ Live MCP traffic</div>
+        <div class="na-wire-body">
+          ${wire.length === 0 ? html`<div class="muted" style=${{ fontSize: "12px" }}>waiting…</div>`
+            : wire.map((w, i) => html`<div key=${i} class=${"na-wire-row" + (w.ok ? "" : " err")}>
+                <span class="na-wire-m">→ tools/call</span>
+                <span class="na-wire-t">${w.tool.replace("sitefinity_", "")}</span>
+                <span class="na-wire-ms">${w.ms}ms</span>
+              </div>`)}
+        </div>
+      </aside>
+    </div>`;
+}
+
+function NaStep({ s, keyword }) {
+  const icon = s.status === "done" ? "✓" : s.status === "running" ? html`<span class="spinner"></span>` : "○";
+  let detail = null;
+  if (s.status === "done" && s.key === "kw") {
+    detail = s.result.count === 0
+      ? html`<span class="na-bad">0 matches — the word "${keyword}" isn't in any title.</span>`
+      : html`<span>${s.result.count} title match(es).</span>`;
+  } else if (s.status === "done" && s.key === "sem") {
+    detail = html`<span class="na-good">${s.result.count} relevant passages</span>${s.result.top?.length ? html` · ${s.result.top.map(stripHtml).join(" · ")}` : null}`;
+  } else if (s.status === "done" && s.key === "ans") {
+    detail = html`<span class="na-good">answer ready</span> · ${s.result.sources} sources cited`;
+  }
+  return html`<div class=${"na-step na-" + s.status}>
+    <span class="na-step-i">${icon}</span>
+    <div class="na-step-b"><div class="na-step-l">${s.label}</div>${detail && html`<div class="na-step-d">${detail}</div>`}</div>
+  </div>`;
 }
 
 /* ============================================================
@@ -557,3 +733,6 @@ function App() {
 
 const rootEl = document.getElementById("studio-root");
 if (rootEl) createRoot(rootEl).render(html`<${App} />`);
+
+const demoEl = document.getElementById("demo-root");
+if (demoEl) createRoot(demoEl).render(html`<${Demo} />`);

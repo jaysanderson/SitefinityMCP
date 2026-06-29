@@ -327,6 +327,14 @@ function renderResults(container, data, items, typeName) {
 }
 
 function stripHtml(s) { return String(s).replace(/<[^>]*>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim(); }
+function cleanDate(d) {
+  if (!d) return "";
+  const s = String(d);
+  if (s.startsWith("0001") || /^00\d\d-/.test(s)) return "";          // null/default dates
+  const y = parseInt(s.slice(0, 4), 10);
+  if (Number.isFinite(y) && y < 1990) return "";
+  return s.replace("T", " ").replace("Z", "");
+}
 function firstOf(obj, keys) { for (const k of keys) if (obj[k] != null && obj[k] !== "") return obj[k]; return null; }
 function looksLikeImage(v) { return typeof v === "string" && /^https?:\/\/.+\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(v); }
 
@@ -342,8 +350,8 @@ function recordCards(items, typeName) {
     }
     const title = firstOf(it, ["Title", "Name", "UrlName"]) || it.Id || "(untitled)";
     card.append(el("div", { className: "rec-title" }, stripHtml(title)));
-    const date = firstOf(it, ["PublicationDate", "LastModified", "DateCreated"]);
-    if (date) card.append(el("div", { className: "rec-date" }, String(date).replace("T", " ").replace("Z", "")));
+    const date = cleanDate(firstOf(it, ["PublicationDate", "LastModified", "DateCreated"]));
+    if (date) card.append(el("div", { className: "rec-date" }, date));
     const desc = firstOf(it, ["Summary", "MetaDescription", "Description", "Content"]);
     if (desc) card.append(el("div", { className: "rec-desc" }, stripHtml(desc).slice(0, 240)));
     if (it.Id) card.append(el("div", { className: "rec-kv" }, "id: " + it.Id));
