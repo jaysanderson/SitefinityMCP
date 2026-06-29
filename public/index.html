@@ -32,6 +32,7 @@
 
   <nav class="tabs" id="tabs">
     <button class="tab is-active" data-view="dashboard">Dashboard</button>
+    <button class="tab" data-view="studio">✨ Studio</button>
     <button class="tab" data-view="assistant">✦ Assistant</button>
     <button class="tab" data-view="library">Content Library</button>
     <button class="tab" data-view="query">Query Builder</button>
@@ -73,6 +74,11 @@
       <h3 class="section-title">Capabilities</h3>
       <p class="muted section-sub">Generated live from <code>tools/list</code>. Click a tool to try it in the Playground.</p>
       <div class="tool-grid" id="toolGrid"></div>
+    </section>
+
+    <!-- STUDIO (React) -->
+    <section class="view" id="view-studio">
+      <div id="studio-root" class="studio"></div>
     </section>
 
     <!-- ASSISTANT -->
@@ -214,5 +220,6 @@
   </footer>
 
   <script src="/app.js" type="module"></script>
+  <script src="/studio.js" type="module"></script>
 </body>
 </html>

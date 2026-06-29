@@ -16,6 +16,8 @@ import { McpHandler } from "./mcp.js";
 import { startHttpServer } from "./http.js";
 import { startStdioServer } from "./stdio.js";
 import { createChatHandler } from "./chat.js";
+import { createComposeHandler } from "./compose.js";
+import { createAtlasHandler } from "./atlas.js";
 
 async function main() {
   const config = loadConfig();
@@ -27,6 +29,8 @@ async function main() {
   const handler = new McpHandler(toolset);
 
   const chat = config.apiKey ? createChatHandler(toolset, config) : null;
+  const compose = config.apiKey ? createComposeHandler(toolset, config) : null;
+  const atlas = createAtlasHandler(client);
 
   console.error(
     `[sitefinity-mcp] generated ${toolset.tools.length} tools; ` +
@@ -42,6 +46,8 @@ async function main() {
       port: config.port,
       serviceRoot: client.serviceRoot,
       chat,
+      compose,
+      atlas,
     });
   }
 }

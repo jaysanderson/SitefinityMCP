@@ -86,6 +86,37 @@ export function startHttpServer(handler, opts) {
       return json(res, 200, info);
     }
 
+    // Atlas — enriched content-type map with live counts (no AI required).
+    if (req.method === "GET" && path === "/api/atlas") {
+      if (!opts.atlas) return json(res, 503, { error: "Atlas unavailable" });
+      try {
+        return json(res, 200, await opts.atlas());
+      } catch (err) {
+        return json(res, 500, { error: err?.message || "Atlas error" });
+      }
+    }
+
+    // Compose — generative experience spec from a brief (needs AI).
+    if (path === "/api/compose") {
+      if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });
+      if (!opts.compose) {
+        return json(res, 503, { error: "Generative composer needs ANTHROPIC_API_KEY." });
+      }
+      let payload;
+      try {
+        payload = JSON.parse((await readBody(req)) || "{}");
+      } catch {
+        return json(res, 400, { error: "Invalid JSON body" });
+      }
+      try {
+        const result = await opts.compose(payload.brief);
+        return json(res, 200, result);
+      } catch (err) {
+        const status = err?.status && err.status >= 400 && err.status < 600 ? 502 : 500;
+        return json(res, status, { error: err?.message || "Composer error" });
+      }
+    }
+
     // AI assistant — agentic chat over the MCP tools (HTTP transport only).
     if (path === "/api/chat") {
       if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });
