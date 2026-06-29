@@ -3,6 +3,8 @@
    Talks to the same origin's /mcp endpoint over JSON-RPC 2.0.
    ============================================================ */
 
+import { markdownToHtml } from "/md.js";
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const el = (tag, props = {}, ...kids) => {
@@ -594,10 +596,7 @@ function chatBubble(m) {
 }
 
 function formatMessage(text) {
-  return escapeHtml(text)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\n/g, "<br>");
+  return markdownToHtml(text);
 }
 
 async function sendChat() {

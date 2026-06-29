@@ -10,12 +10,27 @@
      • Atlas   — an interactive constellation of the whole content universe
    ============================================================ */
 
-// React is vendored and loaded via <script> tags before this module, so it's
-// self-hosted (no runtime CDN dependency — a blank UI from a CDN hiccup can't happen).
-const React = window.React;
+import { markdownToHtml } from "/md.js";
+
+// React is vendored (loaded via <script> before this module). If that failed for
+// any reason (e.g. a cold-start asset hiccup), fall back to a CDN so the UI can
+// never render blank.
+let React = window.React;
+let ReactDOM = window.ReactDOM;
+let htmLib = window.htm;
+if (!React || !ReactDOM || !htmLib) {
+  const [r, rd, h] = await Promise.all([
+    React ? null : import("https://esm.sh/react@18.3.1"),
+    ReactDOM ? null : import("https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1"),
+    htmLib ? null : import("https://esm.sh/htm@3.1.1"),
+  ]);
+  React = React || r.default;
+  ReactDOM = ReactDOM || rd;
+  htmLib = htmLib || h.default;
+}
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
-const { createRoot } = window.ReactDOM;
-const html = window.htm.bind(React.createElement);
+const createRoot = ReactDOM.createRoot;
+const html = htmLib.bind(React.createElement);
 
 /* ---------- shared helpers ---------- */
 let rpcId = 0;
@@ -473,7 +488,7 @@ function GroundedAsk() {
 }
 
 function formatAnswer(text) {
-  return String(text || "").split(/\n+/).map((p, i) => html`<p key=${i}>${p}</p>`);
+  return html`<div class="md" dangerouslySetInnerHTML=${{ __html: markdownToHtml(text) }}></div>`;
 }
 
 const CMP_PRESETS = ["lunch", "sustainability", "kids", "fundraiser", "global flavours"];
