@@ -43,7 +43,7 @@ export async function tryServeStatic(urlPath) {
     const body = await readFile(resolved);
     const ext = path.extname(resolved).toLowerCase();
     const contentType = TYPES[ext] || "application/octet-stream";
-    const cache = ext === ".html" ? "no-cache" : "public, max-age=300";
+    const cache = ext === ".html" ? "no-cache" : "public, max-age=60";
     return {
       status: 200,
       headers: {

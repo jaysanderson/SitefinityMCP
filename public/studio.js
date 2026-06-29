@@ -633,7 +633,14 @@ function NarratedAsk({ question, keyword }) {
     setStep("sem", { status: "running" });
     const semRes = await callToolLogged("sitefinity_semantic_search", { query: question, top: 6 }, logWire);
     const sem = semRes?.results || [];
-    const topTitles = [...new Set(sem.map((r) => r.title))].slice(0, 3);
+    const seenT = new Set();
+    const topTitles = [];
+    for (const r of sem) {
+      const k = String(r.title || "").trim().toLowerCase();
+      if (!k || seenT.has(k)) continue;
+      seenT.add(k); topTitles.push(r.title);
+      if (topTitles.length >= 3) break;
+    }
     setStep("sem", { status: "done", result: { count: sem.length, top: topTitles } });
     await wait(550);
 
