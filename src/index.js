@@ -19,6 +19,7 @@ import { createChatHandler } from "./chat.js";
 import { createComposeHandler } from "./compose.js";
 import { createAtlasHandler } from "./atlas.js";
 import { AragClient } from "./arag.js";
+import { createRagHandlers } from "./rag.js";
 
 async function main() {
   const config = loadConfig();
@@ -37,6 +38,7 @@ async function main() {
   const chat = config.apiKey ? createChatHandler(toolset, config) : null;
   const compose = config.apiKey ? createComposeHandler(toolset, config) : null;
   const atlas = createAtlasHandler(client);
+  const rag = arag ? createRagHandlers({ arag, client }) : null;
 
   console.error(
     `[sitefinity-mcp] generated ${toolset.tools.length} tools; ` +
@@ -55,6 +57,7 @@ async function main() {
       chat,
       compose,
       atlas,
+      rag,
     });
   }
 }

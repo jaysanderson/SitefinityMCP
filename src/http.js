@@ -82,6 +82,7 @@ export function startHttpServer(handler, opts) {
         transport: "streamable-http (stateless)",
         usage: "POST JSON-RPC 2.0 messages to /mcp",
         aiEnabled: !!opts.chat,
+        ragEnabled: !!opts.rag,
       };
       return json(res, 200, info);
     }
@@ -114,6 +115,27 @@ export function startHttpServer(handler, opts) {
       } catch (err) {
         const status = err?.status && err.status >= 400 && err.status < 600 ? 502 : 500;
         return json(res, status, { error: err?.message || "Composer error" });
+      }
+    }
+
+    // RAG Lab — grounded ask + semantic-vs-keyword compare.
+    if (path === "/api/rag/ask" || path === "/api/rag/compare") {
+      if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });
+      if (!opts.rag) return json(res, 503, { error: "Agentic RAG is not configured." });
+      let payload;
+      try {
+        payload = JSON.parse((await readBody(req)) || "{}");
+      } catch {
+        return json(res, 400, { error: "Invalid JSON body" });
+      }
+      try {
+        const out = path.endsWith("/ask")
+          ? await opts.rag.ask(payload.question)
+          : await opts.rag.compare(payload.query);
+        return json(res, 200, out);
+      } catch (err) {
+        const status = err?.status && err.status >= 400 && err.status < 600 ? 502 : 500;
+        return json(res, status, { error: err?.message || "RAG error" });
       }
     }
 

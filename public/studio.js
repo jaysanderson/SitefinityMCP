@@ -377,14 +377,163 @@ function AtlasPanel({ node, items, loading, onClose }) {
 }
 
 /* ============================================================
+   RAG LAB — grounded ask + semantic-vs-keyword compare
+   ============================================================ */
+function RagLab() {
+  const [tab, setTab] = useState("ask");
+  return html`
+    <div class="x-raglab">
+      <div class="x-intro">
+        <h3>Progress Agentic RAG, live on this site.</h3>
+        <p class="muted">The same Sitefinity content, now semantically indexed. Ask grounded questions, or see exactly how meaning-based retrieval beats keyword search.</p>
+      </div>
+      <div class="x-subtabs">
+        <button class=${tab === "ask" ? "is-active" : ""} onClick=${() => setTab("ask")}>Grounded Ask</button>
+        <button class=${tab === "compare" ? "is-active" : ""} onClick=${() => setTab("compare")}>Semantic vs Keyword</button>
+      </div>
+      ${tab === "ask" ? html`<${GroundedAsk} />` : html`<${CompareView} />`}
+    </div>`;
+}
+
+const ASK_PRESETS = [
+  "What is Coriander Lane known for?",
+  "What events are coming up?",
+  "Tell me about the menu and ingredients",
+  "What recent news has the restaurant shared?",
+];
+
+function GroundedAsk() {
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  const run = useCallback(async (text) => {
+    const question = (text ?? q).trim();
+    if (!question || status === "loading") return;
+    setQ(question); setStatus("loading"); setError(""); setData(null);
+    try {
+      const res = await fetch("/api/rag/ask", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Ask failed");
+      setData(j); setStatus("done");
+    } catch (e) { setError(e.message); setStatus("error"); }
+  }, [q, status]);
+
+  return html`
+    <div class="x-ask">
+      <div class="x-bar">
+        <input class="input" placeholder="Ask anything about the site…" value=${q}
+          onInput=${(e) => setQ(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && run()} />
+        <button class="btn btn--primary" disabled=${status === "loading"} onClick=${() => run()}>
+          ${status === "loading" ? "Thinking…" : "Ask"}
+        </button>
+      </div>
+      <div class="x-presets">
+        ${ASK_PRESETS.map((p) => html`<button key=${p} class="x-chip" disabled=${status === "loading"} onClick=${() => run(p)}>${p}</button>`)}
+      </div>
+
+      ${status === "loading" && html`<div class="x-empty panel"><div class="spinner"></div> Retrieving & grounding via Agentic RAG…</div>`}
+      ${status === "error" && html`<div class="x-empty panel"><p class="muted">${error}</p></div>`}
+      ${status === "done" && data && html`
+        <div class="x-answer panel">
+          <div class="x-answer-head">
+            <span class=${"x-ground-badge " + (data.grounded ? "ok" : "low")}>
+              ${data.grounded ? "✓ Grounded" : "⚠ Low confidence"}
+            </span>
+            <span class="muted">via Progress Agentic RAG · ${data.sources.length} source${data.sources.length === 1 ? "" : "s"}</span>
+          </div>
+          <div class="x-answer-body">${formatAnswer(data.answer)}</div>
+          ${data.relations && data.relations.length > 0 && html`
+            <div class="x-rel">
+              <div class="subhead">Entities & relations</div>
+              <div class="chips">${data.relations.slice(0, 18).map((r, i) => html`<span key=${i} class="chip nav">${r.from} → ${r.label} → ${r.to}</span>`)}</div>
+            </div>`}
+          ${data.sources.length > 0 && html`
+            <div class="x-answer-sources">
+              <div class="subhead">Grounded on</div>
+              <div class="x-src-grid">
+                ${data.sources.map((s, i) => html`<div key=${i} class="x-src"><div class="x-src-title">${s.title}</div>${s.slug && html`<div class="x-src-top"><span class="x-src-type">${(s.slug.split("-")[0])}</span></div>`}</div>`)}
+              </div>
+            </div>`}
+        </div>`}
+    </div>`;
+}
+
+function formatAnswer(text) {
+  return String(text || "").split(/\n+/).map((p, i) => html`<p key=${i}>${p}</p>`);
+}
+
+const CMP_PRESETS = ["lunch", "sustainability", "kids", "fundraiser", "global flavours"];
+
+function CompareView() {
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [data, setData] = useState(null);
+
+  const run = useCallback(async (text) => {
+    const query = (text ?? q).trim();
+    if (!query || status === "loading") return;
+    setQ(query); setStatus("loading"); setData(null);
+    try {
+      const res = await fetch("/api/rag/compare", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Compare failed");
+      setData(j); setStatus("done");
+    } catch (e) { setData({ error: e.message }); setStatus("done"); }
+  }, [q, status]);
+
+  return html`
+    <div class="x-compare2">
+      <div class="x-bar">
+        <input class="input" placeholder="Try a word the title search would miss…" value=${q}
+          onInput=${(e) => setQ(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && run()} />
+        <button class="btn btn--primary" disabled=${status === "loading"} onClick=${() => run()}>Compare</button>
+      </div>
+      <div class="x-presets">
+        ${CMP_PRESETS.map((p) => html`<button key=${p} class="x-chip" disabled=${status === "loading"} onClick=${() => run(p)}>${p}</button>`)}
+      </div>
+
+      ${status === "loading" && html`<div class="x-empty panel"><div class="spinner"></div> Running both searches…</div>`}
+      ${status === "done" && data && !data.error && html`
+        <div class="x-cmp-grid">
+          <div class="x-cmp-col">
+            <div class="x-cmp-head keyword"><span>Sitefinity keyword</span><em>OData contains()</em></div>
+            ${data.keyword.length === 0
+              ? html`<div class="x-cmp-empty">No title contains “${data.query}”.</div>`
+              : data.keyword.map((k, i) => html`<div key=${i} class="x-cmp-item"><span class="x-cmp-type">${k.type}</span><div>${stripHtml(k.title)}</div></div>`)}
+          </div>
+          <div class="x-cmp-col">
+            <div class="x-cmp-head semantic"><span>Agentic RAG semantic</span><em>meaning-based</em></div>
+            ${data.semantic.length === 0
+              ? html`<div class="x-cmp-empty">No matches.</div>`
+              : data.semantic.map((s, i) => html`<div key=${i} class="x-cmp-item"><div class="x-cmp-st"><strong>${stripHtml(s.title)}</strong><span class="x-cmp-score">${s.score}</span></div><div class="x-cmp-snip">${stripHtml(s.text).slice(0, 160)}…</div></div>`)}
+          </div>
+        </div>
+        <p class="muted x-cmp-note">Keyword search only matches the literal string in titles. Agentic RAG understands intent — surfacing relevant passages from across all content (and inside documents), even with no keyword overlap.</p>`}
+      ${status === "done" && data && data.error && html`<div class="x-empty panel"><p class="muted">${data.error}</p></div>`}
+    </div>`;
+}
+
+/* ============================================================
    APP shell
    ============================================================ */
 function App() {
   const [mode, setMode] = useState("compose");
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [ragEnabled, setRagEnabled] = useState(false);
 
   useEffect(() => {
-    fetch("/api/info").then((r) => r.json()).then((i) => setAiEnabled(!!i.aiEnabled)).catch(() => {});
+    fetch("/api/info").then((r) => r.json()).then((i) => {
+      setAiEnabled(!!i.aiEnabled);
+      setRagEnabled(!!i.ragEnabled);
+    }).catch(() => {});
   }, []);
 
   return html`
@@ -397,9 +546,12 @@ function App() {
         <div class="x-modes">
           <button class=${mode === "compose" ? "is-active" : ""} onClick=${() => setMode("compose")}>Compose</button>
           <button class=${mode === "atlas" ? "is-active" : ""} onClick=${() => setMode("atlas")}>Atlas</button>
+          ${ragEnabled && html`<button class=${mode === "rag" ? "is-active" : ""} onClick=${() => setMode("rag")}>RAG Lab</button>`}
         </div>
       </div>
-      ${mode === "compose" ? html`<${Compose} aiEnabled=${aiEnabled} />` : html`<${Atlas} />`}
+      ${mode === "compose" ? html`<${Compose} aiEnabled=${aiEnabled} />`
+        : mode === "atlas" ? html`<${Atlas} />`
+        : html`<${RagLab} />`}
     </div>`;
 }
 

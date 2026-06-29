@@ -87,10 +87,13 @@ export class AragClient {
     if (ragStrategies) body.rag_strategies = ragStrategies;
     if (filters) body.filter_expression = filters;
     const raw = await this._req("POST", "/ask", { body, headers: { "x-synchronous": "true" } });
+    const answer = raw?.answer ?? "";
     return {
-      answer: raw?.answer ?? "",
+      answer,
       sources: extractSources(raw),
+      relations: extractRelations(raw),
       citations: raw?.citations ?? null,
+      grounded: !!(answer && !/not enough data/i.test(answer)),
       raw,
     };
   }
@@ -145,6 +148,21 @@ function extractParagraphs(raw, limit) {
   }
   out.sort((a, b) => b.score - a.score);
   return out.slice(0, limit);
+}
+
+/** Best-effort entity relations (triplets) from an /ask payload. */
+function extractRelations(raw) {
+  const out = [];
+  const rel = raw?.relations;
+  // Nuclia shape: { entities: { "<entity>": { related_to: [{entity, relation, ...}] } } }
+  const entities = rel?.entities || {};
+  for (const [from, info] of Object.entries(entities)) {
+    for (const r of info?.related_to || []) {
+      out.push({ from, label: r?.relation || r?.relation_label || "related", to: r?.entity || r?.to || "" });
+      if (out.length >= 60) return out;
+    }
+  }
+  return out;
 }
 
 /** Best-effort source list (resource-level) from an /ask or /find payload. */
