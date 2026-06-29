@@ -10,12 +10,12 @@
      • Atlas   — an interactive constellation of the whole content universe
    ============================================================ */
 
-import React, { useState, useEffect, useRef, useMemo, useCallback }
-  from "https://esm.sh/react@18.3.1";
-import { createRoot } from "https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1";
-import htm from "https://esm.sh/htm@3.1.1";
-
-const html = htm.bind(React.createElement);
+// React is vendored and loaded via <script> tags before this module, so it's
+// self-hosted (no runtime CDN dependency — a blank UI from a CDN hiccup can't happen).
+const React = window.React;
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+const { createRoot } = window.ReactDOM;
+const html = window.htm.bind(React.createElement);
 
 /* ---------- shared helpers ---------- */
 let rpcId = 0;
