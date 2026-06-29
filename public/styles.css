@@ -557,6 +557,12 @@ a.x-src:hover .x-src-link { color: var(--xa, var(--accent)); }
 .na-wire-row.err { background: rgba(248,113,113,0.08); }
 .na-wire-m { color: var(--muted); } .na-wire-t { color: var(--accent); flex: 1; } .na-wire-ms { color: var(--muted-soft); }
 
+/* ---------- Graph Atlas ---------- */
+.x-graph { display: flex; flex-direction: column; gap: 14px; }
+.x-graph .x-stage { background: radial-gradient(70% 70% at 50% 40%, rgba(16,185,129,0.05), transparent 60%), #070b10; }
+.g-node { transition: opacity .2s; }
+.g-label { font-size: 11px; font-family: var(--sans); font-weight: 600; paint-order: stroke; stroke: #070b10; stroke-width: 3px; pointer-events: none; }
+
 /* ---------- Investigate pipeline ---------- */
 .x-inv { display: flex; flex-direction: column; gap: 14px; }
 .inv-pipe { display: flex; flex-direction: column; margin-top: 8px; }

@@ -118,7 +118,59 @@ export function createRagHandlers({ arag, client }) {
     return { question: q, answer, grounded, sources };
   }
 
-  return { ask, compare, investigate };
+  // Knowledge graph: entities extracted from the content + co-occurrence edges
+  // (entities that appear together in the same resource). Cached briefly.
+  let graphCache = null;
+  let graphAt = 0;
+  async function graph() {
+    if (graphCache && Date.now() - graphAt < 300000) return graphCache;
+
+    const nodesRaw = await arag.graphNodes({ prop: "node" }, { top: 80 });
+    const ents = [];
+    const seen = new Set();
+    for (const n of nodesRaw?.nodes || []) {
+      if (n.type !== "entity") continue;
+      const v = (n.value || "").trim();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      ents.push({ value: v, group: n.group || "MISC", score: n.score || 1, degree: 0 });
+      if (ents.length >= 50) break;
+    }
+    const entSet = new Set(ents.map((e) => e.value));
+
+    const pathsRaw = await arag.graph({ prop: "path" }, { top: 400 });
+    const byResource = {};
+    for (const p of pathsRaw?.paths || []) {
+      if (p?.relation?.type !== "ENTITY") continue;
+      const ent = p?.destination?.value;
+      const res = p?.source?.value;
+      if (!ent || !res || !entSet.has(ent)) continue;
+      (byResource[res] ||= new Set()).add(ent);
+    }
+    const edgeMap = {};
+    for (const set of Object.values(byResource)) {
+      const arr = [...set];
+      for (let i = 0; i < arr.length; i++)
+        for (let j = i + 1; j < arr.length; j++) {
+          const a = arr[i], b = arr[j];
+          const key = a < b ? a + "" + b : b + "" + a;
+          edgeMap[key] = (edgeMap[key] || 0) + 1;
+        }
+    }
+    const edges = Object.entries(edgeMap)
+      .map(([k, w]) => { const [from, to] = k.split(""); return { from, to, weight: w }; })
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 140);
+    const deg = {};
+    for (const e of edges) { deg[e.from] = (deg[e.from] || 0) + e.weight; deg[e.to] = (deg[e.to] || 0) + e.weight; }
+    for (const e of ents) e.degree = deg[e.value] || 0;
+
+    graphCache = { entities: ents, edges, groups: [...new Set(ents.map((e) => e.group))], resourceCount: Object.keys(byResource).length };
+    graphAt = Date.now();
+    return graphCache;
+  }
+
+  return { ask, compare, investigate, graph };
 }
 
 function deriveKeyword(s) {

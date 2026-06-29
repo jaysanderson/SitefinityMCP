@@ -118,6 +118,16 @@ export function startHttpServer(handler, opts) {
       }
     }
 
+    // Knowledge graph (entities + co-occurrence edges).
+    if (req.method === "GET" && path === "/api/rag/graph") {
+      if (!opts.rag) return json(res, 503, { error: "Agentic RAG is not configured." });
+      try {
+        return json(res, 200, await opts.rag.graph());
+      } catch (err) {
+        return json(res, 500, { error: err?.message || "Graph error" });
+      }
+    }
+
     // RAG Lab — Investigate (streamed multi-source fan-out).
     if (path === "/api/rag/investigate") {
       if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });

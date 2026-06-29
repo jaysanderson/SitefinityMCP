@@ -804,6 +804,141 @@ function NaStep({ s, keyword }) {
 }
 
 /* ============================================================
+   GRAPH ATLAS — knowledge graph of extracted entities
+   ============================================================ */
+const GROUP_COLORS = { PERSON: "#22d3ee", GPE: "#a78bfa", LOC: "#a78bfa", FAC: "#10b981", ORG: "#f59e0b", NORP: "#f472b6", DATE: "#64748b", TIME: "#64748b", EVENT: "#34d399", PRODUCT: "#fbbf24", MONEY: "#fbbf24", MISC: "#94a3b8", MAIL: "#94a3b8" };
+const GROUP_LABEL = { PERSON: "People", GPE: "Places", LOC: "Places", FAC: "Places/venues", ORG: "Organizations", NORP: "Nationalities", DATE: "Dates", TIME: "Times", EVENT: "Events", PRODUCT: "Products", MONEY: "Money", MISC: "Other", MAIL: "Email" };
+const gColor = (g) => GROUP_COLORS[g] || "#94a3b8";
+const GW = 1000, GH = 620;
+
+function computeGraphLayout(entities, edges) {
+  const n = entities.length;
+  const idx = new Map(entities.map((e, i) => [e.value, i]));
+  const pos = entities.map((e, i) => {
+    const a = i * 2.399963;
+    const r = Math.min(GW, GH) * 0.42 * Math.sqrt((i + 1) / n);
+    return { x: GW / 2 + r * Math.cos(a), y: GH / 2 + r * Math.sin(a), vx: 0, vy: 0 };
+  });
+  const E = edges.map((e) => [idx.get(e.from), idx.get(e.to), e.weight]).filter(([a, b]) => a != null && b != null);
+  const k = Math.sqrt((GW * GH) / Math.max(1, n)) * 0.62;
+  for (let iter = 0; iter < 160; iter++) {
+    const t = 1 - iter / 160;
+    for (let i = 0; i < n; i++) {
+      let fx = 0, fy = 0;
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        let dx = pos[i].x - pos[j].x, dy = pos[i].y - pos[j].y;
+        let d = Math.hypot(dx, dy) || 0.01;
+        const rep = (k * k) / d;
+        fx += (dx / d) * rep; fy += (dy / d) * rep;
+      }
+      pos[i].vx = fx; pos[i].vy = fy;
+    }
+    for (const [a, b, w] of E) {
+      let dx = pos[a].x - pos[b].x, dy = pos[a].y - pos[b].y;
+      let d = Math.hypot(dx, dy) || 0.01;
+      const att = ((d * d) / k) * (0.5 + (0.5 * Math.min(w, 4)) / 4);
+      const ax = (dx / d) * att, ay = (dy / d) * att;
+      pos[a].vx -= ax; pos[a].vy -= ay; pos[b].vx += ax; pos[b].vy += ay;
+    }
+    for (let i = 0; i < n; i++) {
+      pos[i].vx += (GW / 2 - pos[i].x) * 0.03;
+      pos[i].vy += (GH / 2 - pos[i].y) * 0.03;
+      const sp = Math.hypot(pos[i].vx, pos[i].vy) || 0.01;
+      const max = 26 * t + 2;
+      const f = Math.min(sp, max) / sp;
+      pos[i].x += pos[i].vx * f * 0.08; pos[i].y += pos[i].vy * f * 0.08;
+      pos[i].x = Math.max(34, Math.min(GW - 34, pos[i].x));
+      pos[i].y = Math.max(28, Math.min(GH - 28, pos[i].y));
+    }
+  }
+  return pos;
+}
+
+function GraphAtlas() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [sel, setSel] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/rag/graph").then((r) => r.json()).then((d) => {
+      if (d.error) setError(d.error); else setData(d);
+    }).catch((e) => setError(e.message));
+  }, []);
+
+  const layout = useMemo(() => (data ? computeGraphLayout(data.entities, data.edges) : []), [data]);
+  const idx = useMemo(() => (data ? new Map(data.entities.map((e, i) => [e.value, i])) : new Map()), [data]);
+  const neighbors = useMemo(() => {
+    if (!data || !sel) return null;
+    const set = new Set([sel]);
+    for (const e of data.edges) { if (e.from === sel) set.add(e.to); if (e.to === sel) set.add(e.from); }
+    return set;
+  }, [data, sel]);
+
+  if (error) return html`<div class="x-empty panel"><h3>Graph unavailable</h3><p class="muted">${error}</p></div>`;
+  if (!data) return html`<div class="x-empty panel"><div class="spinner"></div> Extracting the knowledge graph…</div>`;
+
+  const maxDeg = Math.max(1, ...data.entities.map((e) => e.degree));
+  const groupsPresent = [...new Set(data.entities.map((e) => e.group))];
+
+  return html`
+    <div class="x-graph">
+      <div class="x-intro">
+        <h3>The knowledge graph inside your content.</h3>
+        <p class="muted">${data.entities.length} entities Agentic RAG automatically extracted from the Sitefinity content (people, places, organizations, dates…), linked where they co-occur across ${data.resourceCount} resources. Click any entity to trace its connections.</p>
+      </div>
+      <div class="x-atlas-legend">
+        ${groupsPresent.map((g) => html`<span key=${g} class="x-leg"><i style=${{ background: gColor(g) }}></i>${GROUP_LABEL[g] || g}</span>`)}
+      </div>
+      <div class="x-stage" style=${{ aspectRatio: GW + " / " + GH }}>
+        <svg viewBox=${`0 0 ${GW} ${GH}`} preserveAspectRatio="xMidYMid meet" style=${{ width: "100%", height: "100%" }}>
+          ${data.edges.map((e, i) => {
+            const a = layout[idx.get(e.from)], b = layout[idx.get(e.to)];
+            if (!a || !b) return null;
+            const active = neighbors && (e.from === sel || e.to === sel);
+            const op = neighbors ? (active ? 0.5 : 0.04) : Math.min(0.06 + e.weight * 0.03, 0.22);
+            return html`<line key=${i} x1=${a.x} y1=${a.y} x2=${b.x} y2=${b.y} stroke=${active ? "#10b981" : "#ffffff"} stroke-opacity=${op} stroke-width=${active ? 1.5 : 1} />`;
+          })}
+          ${data.entities.map((e, i) => {
+            const p = layout[i]; if (!p) return null;
+            const r = 6 + Math.sqrt(e.degree / maxDeg) * 16;
+            const dim = neighbors && !neighbors.has(e.value);
+            const showLabel = sel === e.value || (!sel && e.degree / maxDeg > 0.45);
+            return html`<g key=${e.value} class="g-node" style=${{ opacity: dim ? 0.2 : 1, cursor: "pointer" }}
+              onClick=${() => setSel(sel === e.value ? null : e.value)}>
+              <circle cx=${p.x} cy=${p.y} r=${r} fill=${gColor(e.group)} fill-opacity=${sel === e.value ? 1 : 0.85}
+                stroke=${sel === e.value ? "#fff" : gColor(e.group)} stroke-width=${sel === e.value ? 2 : 1} />
+              ${(showLabel || dim === false) && html`<text x=${p.x} y=${p.y - r - 4} text-anchor="middle" class="g-label" fill="#e8eef5">${e.value}</text>`}
+            </g>`;
+          })}
+        </svg>
+      </div>
+      ${sel && html`<${GraphInfo} data=${data} sel=${sel} onClose=${() => setSel(null)} />`}
+    </div>`;
+}
+
+function GraphInfo({ data, sel, onClose }) {
+  const ent = data.entities.find((e) => e.value === sel);
+  const linked = data.edges
+    .filter((e) => e.from === sel || e.to === sel)
+    .map((e) => ({ name: e.from === sel ? e.to : e.from, weight: e.weight }))
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 12);
+  return html`
+    <div class="x-panel" style=${{ "--nc": gColor(ent?.group) }}>
+      <div class="x-panel-head">
+        <div>
+          <div class="x-panel-type">${sel}</div>
+          <div class="x-panel-meta">${GROUP_LABEL[ent?.group] || ent?.group} · ${linked.length} connection${linked.length === 1 ? "" : "s"}</div>
+        </div>
+        <button class="btn btn--ghost btn--sm" onClick=${onClose}>✕</button>
+      </div>
+      <div class="x-panel-rel"><span class="muted">co-occurs with</span></div>
+      <div class="chips">${linked.map((l, i) => html`<span key=${i} class="chip nav">${l.name}${l.weight > 1 ? ` ×${l.weight}` : ""}</span>`)}</div>
+    </div>`;
+}
+
+/* ============================================================
    APP shell
    ============================================================ */
 function App() {
@@ -829,10 +964,12 @@ function App() {
           <button class=${mode === "compose" ? "is-active" : ""} onClick=${() => setMode("compose")}>Compose</button>
           <button class=${mode === "atlas" ? "is-active" : ""} onClick=${() => setMode("atlas")}>Atlas</button>
           ${ragEnabled && html`<button class=${mode === "rag" ? "is-active" : ""} onClick=${() => setMode("rag")}>RAG Lab</button>`}
+          ${ragEnabled && html`<button class=${mode === "graph" ? "is-active" : ""} onClick=${() => setMode("graph")}>Graph</button>`}
         </div>
       </div>
       ${mode === "compose" ? html`<${Compose} aiEnabled=${aiEnabled} />`
         : mode === "atlas" ? html`<${Atlas} />`
+        : mode === "graph" ? html`<${GraphAtlas} />`
         : html`<${RagLab} />`}
     </div>`;
 }
