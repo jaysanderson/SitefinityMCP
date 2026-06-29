@@ -15,6 +15,7 @@ import { buildTools } from "./tools.js";
 import { McpHandler } from "./mcp.js";
 import { startHttpServer } from "./http.js";
 import { startStdioServer } from "./stdio.js";
+import { createChatHandler } from "./chat.js";
 
 async function main() {
   const config = loadConfig();
@@ -25,9 +26,12 @@ async function main() {
   const toolset = await buildTools(client);
   const handler = new McpHandler(toolset);
 
+  const chat = config.apiKey ? createChatHandler(toolset, config) : null;
+
   console.error(
     `[sitefinity-mcp] generated ${toolset.tools.length} tools; ` +
-      `discovered content types from ${client.serviceRoot} (auth: ${config.authMode}).`
+      `discovered content types from ${client.serviceRoot} (auth: ${config.authMode}; ` +
+      `AI assistant: ${chat ? "enabled (" + config.model + ")" : "disabled"}).`
   );
 
   if (config.transport === "stdio") {
@@ -37,6 +41,7 @@ async function main() {
       host: config.host,
       port: config.port,
       serviceRoot: client.serviceRoot,
+      chat,
     });
   }
 }

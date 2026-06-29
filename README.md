@@ -26,6 +26,8 @@ Open the deployment root in a browser for a single-page app (served from
 [`public/`](public/) by the same Node process) that showcases the whole server:
 
 - **Dashboard** — live capability cards generated from `tools/list`, plus stats.
+- **Assistant** *(optional)* — ask in plain English; Claude answers by calling
+  the MCP tools live (enable with `ANTHROPIC_API_KEY`).
 - **Content Library** — all discovered content types; click one for its full
   field schema, expandable relations, and a live sample of items.
 - **Query Builder** — compose OData queries (filter/select/orderby/paging/expand).
@@ -74,6 +76,20 @@ All via environment variables (see [.env.example](.env.example)).
 | `SITEFINITY_DEFAULT_CULTURE` / `SITEFINITY_SITE_ID` | — | Applied to every request |
 | `MCP_TRANSPORT` | `http` | `http` or `stdio` |
 | `HOST` / `PORT` | `0.0.0.0` / `8080` | HTTP transport bind |
+| `ANTHROPIC_API_KEY` | — | Enables the AI Assistant (server-side secret) |
+| `ANTHROPIC_MODEL` | `claude-opus-4-8` | Model for the Assistant |
+
+### AI Assistant
+
+The optional Assistant turns natural-language questions into live MCP tool calls
+(Claude runs an agentic tool-use loop over this server's own tools). It's
+off until you provide a key. The key is a **server-side secret** — it never
+appears in the repo or reaches the browser; `/api/info` only exposes an
+`aiEnabled` boolean. On Fly:
+
+```bash
+fly secrets set ANTHROPIC_API_KEY=sk-ant-...   # auto-restarts the app
+```
 
 **Auth.** Public content is anonymous. For protected content set
 `SITEFINITY_AUTH_MODE=password`; the server runs the OAuth2 password grant
@@ -142,8 +158,9 @@ no build or install step. Health checks hit `/health`.
 |---|---|---|
 | GET | `/` | Web explorer UI |
 | POST | `/mcp` | JSON-RPC 2.0 MCP messages |
+| POST | `/api/chat` | AI assistant (when `ANTHROPIC_API_KEY` is set) |
 | GET | `/health` | Liveness probe |
-| GET | `/api/info` | Server info (JSON) |
+| GET | `/api/info` | Server info (JSON, incl. `aiEnabled`) |
 
 ## Project layout
 
@@ -155,9 +172,11 @@ src/
   sitefinity.js  REST client (auth, requests, live introspection)
   tools.js       MCP tools, generated from the live schema
   mcp.js         JSON-RPC 2.0 protocol handler
-  http.js        Streamable HTTP transport (+ serves the web UI)
+  http.js        Streamable HTTP transport (+ serves the web UI + /api/chat)
   static.js      Path-traversal-safe static file handler
   stdio.js       stdio transport
+  anthropic.js   Zero-dep Anthropic client + agentic tool-use loop
+  chat.js        AI assistant handler (bridges MCP tools to Claude)
   index.js       Entry point
 public/
   index.html     Web explorer markup

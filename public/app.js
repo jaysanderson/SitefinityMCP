@@ -12,7 +12,7 @@ const el = (tag, props = {}, ...kids) => {
 };
 
 // ---- State -----------------------------------------------------------------
-const state = { tools: [], types: [], info: null, rpcId: 0, wire: [] };
+const state = { tools: [], types: [], info: null, rpcId: 0, wire: [], chat: [], chatBusy: false };
 
 // ---- MCP / JSON-RPC client -------------------------------------------------
 async function rpc(method, params) {
@@ -107,6 +107,7 @@ async function init() {
     populateTypeSelects();
     renderPlayground();
     renderAbout();
+    setupAssistant();
   } catch (e) {
     setStatus("offline", "Offline");
     console.error(e);
@@ -447,6 +448,105 @@ function renderAbout() {
     <p class="muted">Service root: <code>${escapeHtml(state.info?.serviceRoot || "")}</code> ·
     Protocol: <code>${escapeHtml(state.protocol || "")}</code> ·
     <a href="https://github.com/jaysanderson/SitefinityMCP" target="_blank" rel="noopener">Source on GitHub ↗</a></p>`;
+}
+
+// ---- Assistant -------------------------------------------------------------
+const SUGGESTIONS = [
+  "What can you help me explore?",
+  "How many news items are there?",
+  "Find events about food",
+  "What content types exist?",
+  "Show me the 3 latest blog posts",
+];
+
+function setupAssistant() {
+  const enabled = !!state.info?.aiEnabled;
+  $("#ai-disabled").hidden = enabled;
+  $("#ai-chat").hidden = !enabled;
+  if (!enabled) return;
+
+  const suggest = $("#chat-suggest");
+  suggest.innerHTML = "";
+  for (const s of SUGGESTIONS) {
+    const b = el("button", { type: "button" }, s);
+    b.addEventListener("click", () => { $("#chat-input").value = s; sendChat(); });
+    suggest.append(b);
+  }
+  $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat(); });
+  renderChat();
+}
+
+function renderChat() {
+  const log = $("#chat-log");
+  log.innerHTML = "";
+  if (!state.chat.length) {
+    const empty = el("div", { className: "chat-empty" });
+    empty.append(el("div", { className: "big" }, "✦"));
+    empty.append(el("div", {}, "Ask me anything about this Sitefinity site."));
+    empty.append(el("div", { className: "muted", style: "font-size:13px;margin-top:6px" }, "I’ll query it live to answer."));
+    log.append(empty);
+    return;
+  }
+  for (const m of state.chat) log.append(chatBubble(m));
+  if (state.chatBusy) {
+    const t = el("div", { className: "msg msg-ai" });
+    t.append(el("div", { className: "msg-avatar" }, "✦"));
+    const bubble = el("div", { className: "msg-bubble typing" });
+    bubble.innerHTML = "<span></span><span></span><span></span>";
+    t.append(bubble);
+    log.append(t);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+function chatBubble(m) {
+  const row = el("div", { className: "msg " + (m.role === "user" ? "msg-user" : "msg-ai") });
+  row.append(el("div", { className: "msg-avatar" }, m.role === "user" ? "You" : "✦"));
+  const bubble = el("div", { className: "msg-bubble" });
+  bubble.innerHTML = formatMessage(m.content);
+  if (m.trace?.length) {
+    const trace = el("div", { className: "msg-trace" });
+    for (const t of m.trace) trace.append(el("span", { className: "chip" + (t.ok ? "" : " err") }, t.name.replace("sitefinity_", "")));
+    bubble.append(trace);
+  }
+  row.append(bubble);
+  return row;
+}
+
+function formatMessage(text) {
+  return escapeHtml(text)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br>");
+}
+
+async function sendChat() {
+  if (state.chatBusy) return;
+  const input = $("#chat-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  state.chat.push({ role: "user", content: text });
+  state.chatBusy = true;
+  renderChat();
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: state.chat.map((m) => ({ role: m.role, content: m.content })) }),
+    });
+    const data = await res.json();
+    state.chatBusy = false;
+    if (!res.ok) {
+      state.chat.push({ role: "assistant", content: "⚠️ " + (data.error || "Assistant error.") });
+    } else {
+      state.chat.push({ role: "assistant", content: data.reply || "(no reply)", trace: data.trace });
+    }
+  } catch (e) {
+    state.chatBusy = false;
+    state.chat.push({ role: "assistant", content: "⚠️ " + e.message });
+  }
+  renderChat();
 }
 
 // ---- Chrome (tabs, modal, wire) -------------------------------------------

@@ -81,8 +81,30 @@ export function startHttpServer(handler, opts) {
         mcpEndpoint: "/mcp",
         transport: "streamable-http (stateless)",
         usage: "POST JSON-RPC 2.0 messages to /mcp",
+        aiEnabled: !!opts.chat,
       };
       return json(res, 200, info);
+    }
+
+    // AI assistant — agentic chat over the MCP tools (HTTP transport only).
+    if (path === "/api/chat") {
+      if (req.method !== "POST") return json(res, 405, { error: "Method Not Allowed" });
+      if (!opts.chat) {
+        return json(res, 503, { error: "AI assistant is not configured. Set ANTHROPIC_API_KEY." });
+      }
+      let payload;
+      try {
+        payload = JSON.parse(await readBody(req) || "{}");
+      } catch {
+        return json(res, 400, { error: "Invalid JSON body" });
+      }
+      try {
+        const result = await opts.chat(payload.messages);
+        return json(res, 200, { reply: result.text, trace: result.trace, stop: result.stop });
+      } catch (err) {
+        const status = err?.status && err.status >= 400 && err.status < 600 ? 502 : 500;
+        return json(res, status, { error: err?.message || "Assistant error" });
+      }
     }
 
     if (path === "/mcp") {

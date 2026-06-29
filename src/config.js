@@ -44,5 +44,10 @@ export function loadConfig(env = process.env) {
     transport: (env.MCP_TRANSPORT?.trim() || "http").toLowerCase(), // "http" | "stdio"
     host: env.HOST?.trim() || "0.0.0.0",
     port: Number(env.PORT ?? "8080"),
+
+    // Optional AI assistant (powered by the Anthropic API). The key is a
+    // server-side secret — never expose it to the browser.
+    apiKey: env.ANTHROPIC_API_KEY?.trim() || undefined,
+    model: env.ANTHROPIC_MODEL?.trim() || "claude-opus-4-8",
   };
 }
