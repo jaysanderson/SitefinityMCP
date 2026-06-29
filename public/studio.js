@@ -633,7 +633,8 @@ function NarratedAsk({ question, keyword }) {
     setStep("sem", { status: "running" });
     const semRes = await callToolLogged("sitefinity_semantic_search", { query: question, top: 6 }, logWire);
     const sem = semRes?.results || [];
-    setStep("sem", { status: "done", result: { count: sem.length, top: sem.slice(0, 3).map((r) => r.title) } });
+    const topTitles = [...new Set(sem.map((r) => r.title))].slice(0, 3);
+    setStep("sem", { status: "done", result: { count: sem.length, top: topTitles } });
     await wait(550);
 
     setStep("ans", { status: "running" });

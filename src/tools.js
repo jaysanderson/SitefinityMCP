@@ -349,7 +349,7 @@ export async function buildTools(client, arag = null) {
         case "sitefinity_grounded_answer": {
           if (!arag) return fail(new Error("Agentic RAG is not configured."));
           const r = await arag.ask(args.question);
-          return ok({ answer: r.answer, sources: r.sources, citations: r.citations });
+          return ok({ answer: r.answer, sources: r.sources, relations: r.relations, citations: r.citations, grounded: r.grounded && (r.sources?.length || 0) > 0 });
         }
         case "sitefinity_raw_get": {
           const opts = { ...toOptions(args), count: args.count, search: args.search };
