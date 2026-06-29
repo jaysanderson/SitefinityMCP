@@ -61,6 +61,7 @@ function Compose({ aiEnabled }) {
   const [status, setStatus] = useState("idle"); // idle | composing | done | error
   const [spec, setSpec] = useState(null);
   const [trace, setTrace] = useState([]);
+  const [sources, setSources] = useState([]);
   const [error, setError] = useState("");
   const [phase, setPhase] = useState(0);
 
@@ -89,6 +90,7 @@ function Compose({ aiEnabled }) {
       if (!res.ok) throw new Error(data.error || "Compose failed");
       setSpec(data.spec);
       setTrace(data.trace || []);
+      setSources(data.sources || []);
       setStatus("done");
     } catch (e) {
       setError(e.message);
@@ -124,7 +126,7 @@ function Compose({ aiEnabled }) {
 
       ${status === "composing" && html`<${BuildLog} phase=${phase} />`}
       ${status === "error" && html`<div class="x-empty panel"><h3>Couldn't compose that</h3><p class="muted">${error}</p></div>`}
-      ${status === "done" && spec && html`<${Experience} spec=${spec} trace=${trace} key=${spec.title || Math.random()} />`}
+      ${status === "done" && spec && html`<${Experience} spec=${spec} trace=${trace} sources=${sources} key=${spec.title || Math.random()} />`}
     </div>`;
 }
 
@@ -141,11 +143,13 @@ function BuildLog({ phase }) {
 }
 
 /* ---------- experience renderer ---------- */
-function Experience({ spec, trace }) {
+function Experience({ spec, trace, sources }) {
   const [shown, setShown] = useState(false);
+  const [openSources, setOpenSources] = useState(true);
   useEffect(() => { const t = setTimeout(() => setShown(true), 40); return () => clearTimeout(t); }, []);
   const accent = (spec.theme && spec.theme.accent) || "#10b981";
   const style = { "--xa": accent };
+  const srcs = sources || [];
 
   return html`
     <div class=${"x-exp mood-" + ((spec.theme && spec.theme.mood) || "cool")} style=${style}>
@@ -158,12 +162,39 @@ function Experience({ spec, trace }) {
             </div>`)}
         </div>
       </div>
-      ${trace && trace.length > 0 && html`
-        <div class="x-prov">
-          <span class="muted">Built live from</span>
-          ${trace.map((t, i) => html`<span key=${i} class=${"chip" + (t.ok ? "" : " err")}>${(t.name || "").replace("sitefinity_", "")}</span>`)}
-        </div>`}
+
+      <div class="x-ground">
+        <div class="x-ground-head">
+          ${srcs.length > 0
+            ? html`<button class="x-ground-toggle" onClick=${() => setOpenSources((v) => !v)}>
+                <span class="x-ground-caret">${openSources ? "▾" : "▸"}</span>
+                Grounded on <strong>${srcs.length}</strong> live source${srcs.length === 1 ? "" : "s"}
+              </button>`
+            : html`<span class="muted">Built live from the Sitefinity MCP</span>`}
+          ${trace && trace.length > 0 && html`<div class="x-ground-tools">
+            ${trace.map((t, i) => html`<span key=${i} class=${"chip" + (t.ok ? "" : " err")}>${(t.name || "").replace("sitefinity_", "")}</span>`)}
+          </div>`}
+        </div>
+        ${openSources && srcs.length > 0 && html`
+          <div class="x-src-grid">
+            ${srcs.map((s, i) => html`<${SourceCard} key=${i} s=${s} />`)}
+          </div>`}
+      </div>
     </div>`;
+}
+
+function SourceCard({ s }) {
+  const href = s.siteUrl || s.apiUrl || null;
+  const inner = html`
+    <div class="x-src-top">
+      <span class="x-src-type">${s.type || "item"}</span>
+      ${s.date && html`<span class="x-src-date">${fmtDate(s.date)}</span>`}
+    </div>
+    <div class="x-src-title">${s.title}</div>
+    ${href && html`<span class="x-src-link">open ↗</span>`}`;
+  return href
+    ? html`<a class="x-src" href=${href} target="_blank" rel="noopener">${inner}</a>`
+    : html`<div class="x-src">${inner}</div>`;
 }
 
 function Section({ s }) {

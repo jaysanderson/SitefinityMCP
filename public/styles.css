@@ -415,6 +415,23 @@ pre.json {
 .xs-quote cite { color: var(--xa); font-style: normal; font-size: 14px; font-weight: 600; }
 .x-prov { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 14px; font-size: 12px; }
 
+/* grounded sources */
+.x-ground { margin-top: 16px; }
+.x-ground-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.x-ground-toggle { background: none; border: none; color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 0; }
+.x-ground-toggle strong { color: var(--xa, var(--accent)); }
+.x-ground-caret { color: var(--muted); font-size: 11px; }
+.x-ground-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.x-src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 14px; }
+.x-src { display: flex; flex-direction: column; gap: 7px; padding: 13px 14px; border-radius: 11px; border: 1px solid var(--border); background: var(--panel); text-decoration: none; color: var(--text); transition: transform .14s, border-color .2s; position: relative; }
+a.x-src:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--xa, var(--accent)) 55%, var(--border)); }
+.x-src-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.x-src-type { font-family: var(--mono); font-size: 10.5px; color: var(--xa, var(--accent)); text-transform: lowercase; }
+.x-src-date { font-size: 10.5px; color: var(--muted-soft); font-family: var(--mono); }
+.x-src-title { font-size: 13px; font-weight: 600; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.x-src-link { font-size: 11px; color: var(--muted); }
+a.x-src:hover .x-src-link { color: var(--xa, var(--accent)); }
+
 /* ---- Atlas ---- */
 .x-atlas { display: flex; flex-direction: column; gap: 14px; }
 .x-atlas-legend { display: flex; gap: 16px; flex-wrap: wrap; }
