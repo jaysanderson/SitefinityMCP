@@ -49,5 +49,11 @@ export function loadConfig(env = process.env) {
     // server-side secret — never expose it to the browser.
     apiKey: env.ANTHROPIC_API_KEY?.trim() || undefined,
     model: env.ANTHROPIC_MODEL?.trim() || "claude-opus-4-8",
+
+    // Optional Progress Agentic RAG (ARAG) integration. Key is a server-side
+    // secret; region + KB id are plain config.
+    aragKey: env.ARAG_API_KEY?.trim() || undefined,
+    aragRegion: env.ARAG_REGION?.trim() || "aws-us-east-2-1",
+    aragKbId: env.ARAG_KB_ID?.trim() || undefined,
   };
 }

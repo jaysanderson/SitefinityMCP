@@ -68,7 +68,7 @@ function toOptions(args) {
  * Build the tool list (with live type enum) and a dispatcher.
  * @param {import('./sitefinity.js').SitefinityClient} client
  */
-export async function buildTools(client) {
+export async function buildTools(client, arag = null) {
   // Discover the live schema so tool schemas reflect the real API.
   let schema;
   try {
@@ -234,6 +234,45 @@ export async function buildTools(client) {
     },
   ];
 
+  // ARAG-backed tools — only registered when Progress Agentic RAG is configured.
+  if (arag) {
+    tools.push(
+      {
+        name: "sitefinity_semantic_search",
+        title: "Semantic search (Agentic RAG)",
+        description:
+          "Meaning-based search over the site's content indexed in Progress Agentic RAG. Unlike " +
+          "substring search, this understands intent and finds relevant passages even without exact " +
+          "keyword matches. Returns ranked paragraphs with their source resources.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Natural-language search query." },
+            top: { type: "integer", minimum: 1, maximum: 30, description: "Max passages (default 8)." },
+          },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "sitefinity_grounded_answer",
+        title: "Grounded answer (Agentic RAG)",
+        description:
+          "Ask a question and get a synthesized, CITED answer grounded in the site's content via " +
+          "Progress Agentic RAG (retrieval-augmented generation). Returns the answer plus the source " +
+          "resources it was grounded on. Prefer this for 'what/how/why' questions about site content.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            question: { type: "string", description: "The question to answer from site content." },
+          },
+          required: ["question"],
+          additionalProperties: false,
+        },
+      }
+    );
+  }
+
   async function call(name, args = {}) {
     try {
       switch (name) {
@@ -298,6 +337,19 @@ export async function buildTools(client) {
           const s = await client.getSchema();
           const entitySets = s.entitySets.map((e) => e.name);
           return args.includeXml ? ok({ entitySets, metadataXml: s.xml }) : ok({ entitySets });
+        }
+        case "sitefinity_semantic_search": {
+          if (!arag) return fail(new Error("Agentic RAG is not configured."));
+          const r = await arag.find(args.query, { top: args.top ?? 8 });
+          return ok({
+            query: args.query,
+            results: r.paragraphs.map((p) => ({ title: p.title, text: p.text, score: p.score })),
+          });
+        }
+        case "sitefinity_grounded_answer": {
+          if (!arag) return fail(new Error("Agentic RAG is not configured."));
+          const r = await arag.ask(args.question);
+          return ok({ answer: r.answer, sources: r.sources, citations: r.citations });
         }
         case "sitefinity_raw_get": {
           const opts = { ...toOptions(args), count: args.count, search: args.search };

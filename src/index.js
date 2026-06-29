@@ -18,14 +18,20 @@ import { startStdioServer } from "./stdio.js";
 import { createChatHandler } from "./chat.js";
 import { createComposeHandler } from "./compose.js";
 import { createAtlasHandler } from "./atlas.js";
+import { AragClient } from "./arag.js";
 
 async function main() {
   const config = loadConfig();
   const client = new SitefinityClient(config);
 
+  // Optional Progress Agentic RAG client (semantic search + grounded answers).
+  const arag = config.aragKey && config.aragKbId
+    ? new AragClient({ apiKey: config.aragKey, region: config.aragRegion, kbId: config.aragKbId })
+    : null;
+
   // Generate the tool surface from the live API (falls back gracefully if the
-  // service is briefly unreachable at startup).
-  const toolset = await buildTools(client);
+  // service is briefly unreachable at startup). ARAG tools are added when configured.
+  const toolset = await buildTools(client, arag);
   const handler = new McpHandler(toolset);
 
   const chat = config.apiKey ? createChatHandler(toolset, config) : null;
@@ -35,7 +41,8 @@ async function main() {
   console.error(
     `[sitefinity-mcp] generated ${toolset.tools.length} tools; ` +
       `discovered content types from ${client.serviceRoot} (auth: ${config.authMode}; ` +
-      `AI assistant: ${chat ? "enabled (" + config.model + ")" : "disabled"}).`
+      `AI assistant: ${chat ? "enabled (" + config.model + ")" : "disabled"}; ` +
+      `Agentic RAG: ${arag ? "enabled (" + config.aragRegion + ")" : "disabled"}).`
   );
 
   if (config.transport === "stdio") {

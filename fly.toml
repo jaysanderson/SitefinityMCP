@@ -14,6 +14,7 @@ primary_region = "syd"
   SITEFINITY_BASE_URL = "https://sta.eftm2.cloud.sitefinity.com"
   SITEFINITY_SERVICE_NAME = "default"
   SITEFINITY_AUTH_MODE = "anonymous"
+  ARAG_REGION = "aws-us-east-2-1"
 
 [http_service]
   internal_port = 8080
