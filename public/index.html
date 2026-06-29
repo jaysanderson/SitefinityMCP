@@ -48,6 +48,21 @@
         <p class="muted">This page talks to the same server over the Model Context Protocol. Every panel below issues real <code>tools/call</code> requests against a live Sitefinity instance.</p>
       </div>
 
+      <div class="connect" id="connect">
+        <div class="connect-row">
+          <div class="connect-main">
+            <div class="connect-label">◆ Public MCP endpoint — connect any client</div>
+            <div class="connect-url">
+              <code id="mcp-url">…/mcp</code>
+              <button id="copy-url" class="btn btn--primary btn--sm" type="button">Copy</button>
+            </div>
+            <div class="connect-sub muted">Streamable HTTP · no auth required · point your AI app or agent here</div>
+          </div>
+          <button id="config-toggle" class="btn btn--ghost btn--sm" type="button">Show client config ▾</button>
+        </div>
+        <pre class="json connect-config" id="connect-config" hidden></pre>
+      </div>
+
       <div class="stats" id="stats">
         <div class="stat"><div class="stat-num" id="stat-tools">—</div><div class="stat-label">MCP Tools</div></div>
         <div class="stat"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Content Types</div></div>

@@ -81,9 +81,48 @@ function jsonHighlight(obj) {
   return span;
 }
 
+// ---- Connect card ----------------------------------------------------------
+function setupConnect() {
+  const url = location.origin + "/mcp";
+  $("#mcp-url").textContent = url;
+
+  const config = JSON.stringify(
+    { mcpServers: { sitefinity: { type: "http", url } } },
+    null,
+    2
+  );
+  const configEl = $("#connect-config");
+  configEl.innerHTML = "";
+  configEl.append(jsonHighlight(config));
+
+  $("#copy-url").addEventListener("click", async () => {
+    const btn = $("#copy-url");
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const r = document.createRange();
+      r.selectNode($("#mcp-url"));
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    const prev = btn.textContent;
+    btn.textContent = "Copied ✓";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = prev; btn.classList.remove("copied"); }, 1600);
+  });
+
+  $("#config-toggle").addEventListener("click", () => {
+    const open = configEl.hidden;
+    configEl.hidden = !open;
+    $("#config-toggle").textContent = open ? "Hide client config ▴" : "Show client config ▾";
+  });
+}
+
 // ---- Init ------------------------------------------------------------------
 async function init() {
   wireUpChrome();
+  setupConnect();
   try {
     const initRes = await rpc("initialize", {
       protocolVersion: "2025-06-18",
