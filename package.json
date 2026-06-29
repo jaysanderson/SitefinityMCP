@@ -1,0 +1,27 @@
+{
+  "name": "sitefinity-mcp",
+  "version": "1.0.0",
+  "description": "Zero-dependency Model Context Protocol server for the Sitefinity CMS REST (OData) Web Services API. Tools are generated dynamically from the live service $metadata.",
+  "type": "module",
+  "bin": {
+    "sitefinity-mcp": "src/index.js"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "stdio": "MCP_TRANSPORT=stdio node src/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "sitefinity",
+    "progress",
+    "cms",
+    "odata",
+    "rest"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,8 @@
+.git
+.recon
+node_modules
+*.log
+.env
+.DS_Store
+.claude
+README.md
