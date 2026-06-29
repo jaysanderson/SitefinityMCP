@@ -13,9 +13,28 @@ adapts to that site's content model.
 - **No npm dependencies** — runs on plain Node.js (built-ins only). Nothing to install.
 - **Two transports** — Streamable HTTP (for hosting) and stdio (for local clients).
 - **Read-only** — every tool issues `GET` requests.
+- **Live web explorer** — the same server hosts an interactive UI that exercises every tool.
 
 Default target: `https://sta.eftm2.cloud.sitefinity.com/api/default/`
-Live deployment: **https://sitefinity-mcp-eftm2.fly.dev/mcp**
+Live deployment:
+- Web explorer: **https://sitefinity-mcp-eftm2.fly.dev/**
+- MCP endpoint: **https://sitefinity-mcp-eftm2.fly.dev/mcp**
+
+## Web explorer
+
+Open the deployment root in a browser for a single-page app (served from
+[`public/`](public/) by the same Node process) that showcases the whole server:
+
+- **Dashboard** — live capability cards generated from `tools/list`, plus stats.
+- **Content Library** — all discovered content types; click one for its full
+  field schema, expandable relations, and a live sample of items.
+- **Query Builder** — compose OData queries (filter/select/orderby/paging/expand).
+- **Search** — free-text `contains()` search rendered as cards.
+- **Tool Playground** — auto-generated forms for *every* tool, built from each
+  tool's input schema, with the exact JSON-RPC request/response shown.
+- **Wire log** — a drawer streaming every JSON-RPC message on the wire.
+
+No build step — it's vanilla HTML/CSS/JS.
 
 ## Tools
 
@@ -121,9 +140,10 @@ no build or install step. Health checks hit `/health`.
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/` | Web explorer UI |
 | POST | `/mcp` | JSON-RPC 2.0 MCP messages |
 | GET | `/health` | Liveness probe |
-| GET | `/` | Info page |
+| GET | `/api/info` | Server info (JSON) |
 
 ## Project layout
 
@@ -135,9 +155,14 @@ src/
   sitefinity.js  REST client (auth, requests, live introspection)
   tools.js       MCP tools, generated from the live schema
   mcp.js         JSON-RPC 2.0 protocol handler
-  http.js        Streamable HTTP transport
+  http.js        Streamable HTTP transport (+ serves the web UI)
+  static.js      Path-traversal-safe static file handler
   stdio.js       stdio transport
   index.js       Entry point
+public/
+  index.html     Web explorer markup
+  styles.css     Web explorer styles
+  app.js         Web explorer logic (vanilla ES module)
 Dockerfile       Container image (no install step)
 fly.toml         Fly.io deployment config
 ```
